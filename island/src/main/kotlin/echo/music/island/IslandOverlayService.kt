@@ -304,6 +304,7 @@ class IslandOverlayService : Service() {
 
     fun start() {
       savedStateController.performAttach()
+      savedStateController.performRestore(null)
       lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
       lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
       lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
