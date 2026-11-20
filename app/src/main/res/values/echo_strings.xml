@@ -54,6 +54,7 @@
     <string name="please_wait">Please wait</string>
     <string name="cancel">Cancel</string>
     <string name="enable">Enable</string>
+    <string name="off">Off</string>
     <string name="share_lyrics">Share lyrics</string>
     <string name="share_as_text">Share as text</string>
     <string name="share_as_image">Share as image</string>
@@ -258,6 +259,8 @@
     <string name="island_enable">Enable Dynamic Island</string>
     <string name="island_enable_desc">Requires permission to draw over other apps</string>
     <string name="island_auto_hide">Auto-hide after</string>
+    <string name="island_inactivity_timeout">Expanded inactivity timeout</string>
+    <string name="island_inactivity_timeout_value">%1$d seconds</string>
     <string name="island_show_track_change">Expand on track change</string>
     <string name="island_show_track_change_desc">Briefly show title, artist, and progress</string>
     <string name="island_vertical_offset">Vertical offset</string>

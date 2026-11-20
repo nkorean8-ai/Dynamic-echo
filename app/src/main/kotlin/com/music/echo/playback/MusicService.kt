@@ -126,6 +126,7 @@ import echo.music.iad1tya.constants.SkipSilenceInstantKey
 import echo.music.iad1tya.constants.SkipSilenceKey
 import echo.music.iad1tya.constants.SpatialAudioKey
 import echo.music.iad1tya.constants.IslandAutoHideSecondsKey
+import echo.music.iad1tya.constants.IslandInactivitySecondsKey
 import echo.music.iad1tya.constants.IslandEnabledKey
 import echo.music.iad1tya.constants.IslandShowTrackChangeKey
 import echo.music.iad1tya.constants.IslandVerticalOffsetKey
@@ -902,6 +903,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           IslandSettings(
             enabled = preferences[IslandEnabledKey] ?: false,
             autoHideSeconds = preferences[IslandAutoHideSecondsKey] ?: 30,
+            inactivitySeconds = preferences[IslandInactivitySecondsKey] ?: 5,
             showTrackChange = preferences[IslandShowTrackChangeKey] ?: true,
             verticalOffsetDp = preferences[IslandVerticalOffsetKey] ?: 0,
           )

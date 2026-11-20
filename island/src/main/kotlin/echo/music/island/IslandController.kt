@@ -25,6 +25,7 @@ data class IslandPlaybackState(
 data class IslandSettings(
   val enabled: Boolean = false,
   val autoHideSeconds: Int = 30,
+  val inactivitySeconds: Int = 5,
   val showTrackChange: Boolean = true,
   val verticalOffsetDp: Int = 0,
 )

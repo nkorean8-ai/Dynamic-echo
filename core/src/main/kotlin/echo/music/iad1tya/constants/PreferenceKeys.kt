@@ -825,6 +825,7 @@ val VirtualizerKey = floatPreferencesKey("virtualizer")
 
 val IslandEnabledKey = booleanPreferencesKey("island_enabled")
 val IslandAutoHideSecondsKey = intPreferencesKey("island_auto_hide_seconds")
+val IslandInactivitySecondsKey = intPreferencesKey("island_inactivity_seconds")
 val IslandShowTrackChangeKey = booleanPreferencesKey("island_show_track_change")
 val IslandVerticalOffsetKey = intPreferencesKey("island_vertical_offset")
 val ListenBrainzEnabledKey = booleanPreferencesKey("listenbrainz_enabled")

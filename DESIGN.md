@@ -94,7 +94,9 @@ cutout rather than a stock Material container. Album art is the only image accen
 metadata is white/gray and playback activity is represented by narrow animated bars.
 Expanded controls use flat text glyphs and a custom progress line. The overlay must
 respect display-cutout/status-bar insets, disappear while Echo Music is foreground,
-and provide an explicit long-press/swipe dismissal path.
+and use only upward swipe to collapse from the expanded panel. A compact tap expands
+the panel; it must not open the app or depend on long press. Expanded artwork, empty
+area, controls, and seek dragging remain inside the panel and outside taps collapse it.
 
 
 ## Music Flow

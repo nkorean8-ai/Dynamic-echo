@@ -382,7 +382,12 @@ the service and leaves normal media playback/notification behavior unchanged.
 The overlay is intentionally monochrome: a black rounded pill, white metadata, animated
 bars, and a custom progress line. Preferences are `Island*Key` values in
 `core/.../PreferenceKeys.kt`; the settings UI must keep the permission request explicit
-and explain the `SYSTEM_ALERT_WINDOW` requirement.
+and explain the `SYSTEM_ALERT_WINDOW` requirement. The collapsed pill tap expands only:
+it never opens the app or requires a long press. Expanded taps and controls reset the
+inactivity timer; playback and track updates do not. Seeking suppresses timeout while
+dragging and restarts it on drag end. The overlay uses `FLAG_WATCH_OUTSIDE_TOUCH`,
+`FLAG_NOT_TOUCH_MODAL`, and a four-state lifecycle (`Collapsed`, `Expanding`, `Expanded`,
+`Collapsing`) with compact dimensions restored after the collapse animation.
 
 ## Library UI Separation
 
