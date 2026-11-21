@@ -375,9 +375,11 @@ Ambient Mode keeps the existing album-art square and layers muted Canvas artwork
 The optional Dynamic Island equivalent lives in the `:island` module. `IslandController`
 is the single state bridge from `MusicService` to the overlay service; it never owns a
 player. The service uses a ComposeView with explicit lifecycle, saved-state, and
-ViewModel-store owners, positions itself from status-bar/display-cutout insets, and
-removes itself while the app process is foregrounded. Overlay permission denial stops
-the service and leaves normal media playback/notification behavior unchanged.
+ViewModel-store owners, disposes composition on window detachment, tracks pending
+WindowManager attachment separately from view attachment, positions itself from
+status-bar/display-cutout insets, and removes itself while the app process is foregrounded.
+Overlay permission denial stops the service and leaves normal media playback/notification
+behavior unchanged.
 
 The overlay is intentionally monochrome by default: a black rounded pill, white metadata,
 playback-aware bars (static while paused), and a custom progress line. Optional artwork-

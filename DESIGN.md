@@ -106,7 +106,10 @@ empty area, controls, and seek dragging remain inside the panel and outside taps
 it. The content morphs with a spring inside a correctly sized overlay window: enlarge the
 window before expanding and keep it expanded until the collapse morph completes. The
 3/5/8/10-second or Off timeout is reset by actual panel touches, never by playback or
-metadata updates; a seek drag suppresses it until release.
+metadata updates; a seek drag suppresses it until release. Dispose the Compose content
+when the overlay window detaches, and remove WindowManager-registered views even if their
+first attach callback has not run yet; the service-owned lifecycle must remain alive until
+the view is no longer registered.
 
 
 ## Music Flow

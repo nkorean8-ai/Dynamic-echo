@@ -137,6 +137,7 @@ class IslandOverlayService : Service() {
   private val gestureHandler = Handler(Looper.getMainLooper())
   private var windowManager: WindowManager? = null
   private var overlayView: ComposeView? = null
+  private var overlayViewAdded = false
   private var hideJob: Job? = null
   private var inactivityJob: Job? = null
   private var trackChangeJob: Job? = null
@@ -298,7 +299,7 @@ class IslandOverlayService : Service() {
     overlayOwners = OverlayOwners()
     val view =
       ComposeView(this).apply {
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         setViewTreeLifecycleOwner(overlayOwners)
         setViewTreeSavedStateRegistryOwner(overlayOwners)
         setViewTreeViewModelStoreOwner(overlayOwners)
@@ -340,6 +341,15 @@ class IslandOverlayService : Service() {
     overlayView = view
     overlayOwners.start()
     val compact = isCompactPhase(phase)
+    val manager =
+      windowManager ?: run {
+        Log.e(TAG, "Window manager unavailable while attaching the island overlay")
+        overlayView = null
+        overlayViewAdded = false
+        overlayOwners.stop()
+        stopSelf()
+        return
+      }
     val params =
       WindowManager.LayoutParams(
         dp(if (compact) COMPACT_WIDTH_DP else expandedWindowWidthDp()),
@@ -357,26 +367,31 @@ class IslandOverlayService : Service() {
         y = initialTopInset() + dp(controller.settings.value.verticalOffsetDp)
       }
     try {
-      windowManager?.addView(view, params)
+      manager.addView(view, params)
+      overlayViewAdded = true
       if (view.isAttachedToWindow) ViewCompat.requestApplyInsets(view)
     } catch (error: WindowManager.BadTokenException) {
       Log.e(TAG, "Unable to attach the island overlay window", error)
       overlayView = null
+      overlayViewAdded = false
       overlayOwners.stop()
       stopSelf()
     } catch (error: IllegalArgumentException) {
       Log.e(TAG, "Invalid island overlay window parameters", error)
       overlayView = null
+      overlayViewAdded = false
       overlayOwners.stop()
       stopSelf()
     } catch (error: IllegalStateException) {
       Log.e(TAG, "Island overlay could not be attached in its current state", error)
       overlayView = null
+      overlayViewAdded = false
       overlayOwners.stop()
       stopSelf()
     } catch (error: SecurityException) {
       Log.e(TAG, "Overlay permission was revoked while attaching the island", error)
       overlayView = null
+      overlayViewAdded = false
       overlayOwners.stop()
       stopSelf()
     }
@@ -451,20 +466,25 @@ class IslandOverlayService : Service() {
     phase = IslandPhase.COLLAPSED
     val manager = windowManager
     val view = overlayView
-    if (view?.isAttachedToWindow == true && manager != null) {
+    if (view != null && manager != null && overlayViewAdded) {
       try {
         manager.removeViewImmediate(view)
+        overlayViewAdded = false
       } catch (error: WindowManager.BadTokenException) {
         Log.w(TAG, "Island overlay token expired during removal", error)
+        if (!view.isAttachedToWindow) overlayViewAdded = false
       } catch (error: IllegalArgumentException) {
         Log.w(TAG, "Island overlay was not registered during removal", error)
+        overlayViewAdded = false
       } catch (error: IllegalStateException) {
         Log.w(TAG, "Island overlay was already removed", error)
+        if (!view.isAttachedToWindow) overlayViewAdded = false
       } catch (error: SecurityException) {
         Log.e(TAG, "Overlay permission was revoked during removal", error)
+        if (!view.isAttachedToWindow) overlayViewAdded = false
       }
     }
-    if (view == null || !view.isAttachedToWindow) {
+    if (!overlayViewAdded && (view == null || !view.isAttachedToWindow)) {
       overlayView = null
       if (overlayOwners.lifecycle.currentState.isAtLeast(Lifecycle.State.CREATED)) {
         overlayOwners.stop()
