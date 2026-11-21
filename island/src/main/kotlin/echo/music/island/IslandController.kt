@@ -4,6 +4,10 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.graphics.Rect
+import android.graphics.RectF
+import android.os.Build
+import android.view.DisplayCutout
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -31,6 +35,7 @@ data class IslandSettings(
   val inactivitySeconds: Int = 5,
   val showTrackChange: Boolean = true,
   val verticalCalibrationDp: Int = 0,
+  val verticalBaselineCorrectionDp: Int = 0,
   val horizontalOffsetDp: Int = 0,
   val compactWidthDp: Int = 140,
   val compactHeightDp: Int = 32,
@@ -47,6 +52,44 @@ data class IslandSettings(
   val hapticsEnabled: Boolean = false,
   val clickHapticsEnabled: Boolean = true,
 )
+
+data class IslandCutoutAnchor(
+  val centerX: Float,
+  val centerY: Float,
+  val boundingRect: Rect?,
+  val pathBounds: RectF?,
+  val usesPath: Boolean,
+)
+
+fun resolveIslandCutoutAnchor(
+  cutout: DisplayCutout?,
+  density: Float,
+): IslandCutoutAnchor? {
+  val rect =
+    cutout?.boundingRects
+      ?.filter { it.top <= cutout.safeInsetTop }
+      ?.maxByOrNull { it.width().toLong() * it.height().toLong() }
+      ?: return null
+  val pathBounds =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      cutout.cutoutPath?.let { path ->
+        RectF().also { bounds -> path.computeBounds(bounds, true) }
+      }
+    } else {
+      null
+    }
+  val pathOffsetDp = pathBounds?.let { (it.centerY() - rect.exactCenterY()) / density }
+  val usesPath =
+    pathBounds != null &&
+      pathBounds.width() > 0f &&
+      pathBounds.height() > 0f &&
+      kotlin.math.abs((pathOffsetDp ?: 0f) - 8f) <= 2f
+  return if (usesPath) {
+    IslandCutoutAnchor(pathBounds!!.centerX(), pathBounds.centerY(), rect, pathBounds, true)
+  } else {
+    IslandCutoutAnchor(rect.exactCenterX(), rect.exactCenterY(), rect, pathBounds, false)
+  }
+}
 
 @Singleton
 class IslandController @Inject constructor(

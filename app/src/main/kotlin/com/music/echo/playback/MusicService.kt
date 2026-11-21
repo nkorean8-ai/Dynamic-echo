@@ -22,6 +22,7 @@ import android.media.audiofx.LoudnessEnhancer
 import android.net.ConnectivityManager
 import android.os.Binder
 import android.os.Build
+import android.view.WindowManager
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
 import androidx.datastore.preferences.core.edit
@@ -130,6 +131,7 @@ import echo.music.iad1tya.constants.IslandAutoHideSecondsKey
 import echo.music.iad1tya.constants.IslandBackgroundStyleKey
 import echo.music.iad1tya.constants.IslandBackgroundTarget
 import echo.music.iad1tya.constants.IslandBackgroundTargetKey
+import echo.music.iad1tya.constants.IslandCalibrationMigrationVersionKey
 import echo.music.iad1tya.constants.IslandInactivitySecondsKey
 import echo.music.iad1tya.constants.IslandEnabledKey
 import echo.music.iad1tya.constants.IslandCompactHeightKey
@@ -143,6 +145,7 @@ import echo.music.iad1tya.constants.IslandShowTrackChangeKey
 import echo.music.iad1tya.constants.IslandSliderStyleKey
 import echo.music.iad1tya.constants.IslandSingleTapExpandKey
 import echo.music.iad1tya.constants.IslandVerticalCalibrationKey
+import echo.music.iad1tya.constants.IslandVerticalBaselineCorrectionKey
 import echo.music.iad1tya.constants.IslandVerticalOffsetKey
 import echo.music.iad1tya.constants.SliderStyleKey
 import echo.music.iad1tya.constants.SquigglySliderKey
@@ -168,6 +171,7 @@ import echo.music.dsp.data.EQProfileRepository
 import echo.music.island.IslandController
 import echo.music.island.IslandPlaybackState
 import echo.music.island.IslandSettings
+import echo.music.island.resolveIslandCutoutAnchor
 import echo.music.iad1tya.playback.AudioSinkSelector
 import echo.music.usbaudio.UsbAudioDriver
 import echo.music.usbaudio.UsbDacAudioSink
@@ -516,6 +520,30 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         isPaused = playbackState == Player.STATE_READY && !player.playWhenReady,
       )
     )
+  }
+
+  private suspend fun migrateIslandCalibration() {
+    val cutout =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        getSystemService(WindowManager::class.java).currentWindowMetrics.windowInsets.displayCutout
+      } else {
+        null
+      }
+    val useCutoutPath =
+      resolveIslandCutoutAnchor(cutout, resources.displayMetrics.density)?.usesPath == true
+    dataStore.edit { preferences ->
+      if ((preferences[IslandCalibrationMigrationVersionKey] ?: 0) >= 1) {
+        return@edit
+      }
+      val savedCalibration =
+        preferences[IslandVerticalCalibrationKey]
+          ?: ((preferences[IslandVerticalOffsetKey] ?: -22) + 22)
+      preferences[IslandVerticalCalibrationKey] = 0
+      preferences[IslandVerticalBaselineCorrectionKey] =
+        if (useCutoutPath) 0 else savedCalibration
+      preferences[IslandInvertSwipesKey] = false
+      preferences[IslandCalibrationMigrationVersionKey] = 1
+    }
   }
 
   private fun restorePlayerVolume(volume: Float): Float =
@@ -932,6 +960,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     )
     islandController.setRenderers(IslandAppRenderers)
     scope.launch {
+      migrateIslandCalibration()
       dataStore.data
         .map { preferences ->
           IslandSettings(
@@ -943,6 +972,8 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
             verticalCalibrationDp =
               preferences[IslandVerticalCalibrationKey]
                 ?: ((preferences[IslandVerticalOffsetKey] ?: -22) + 22),
+            verticalBaselineCorrectionDp =
+              preferences[IslandVerticalBaselineCorrectionKey] ?: 0,
             horizontalOffsetDp = preferences[IslandHorizontalOffsetKey] ?: 0,
             compactWidthDp = preferences[IslandCompactWidthKey] ?: 140,
             compactHeightDp = preferences[IslandCompactHeightKey] ?: 32,

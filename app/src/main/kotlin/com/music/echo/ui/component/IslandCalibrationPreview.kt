@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 @androidx.compose.runtime.Composable
 fun IslandCalibrationPreview(
   verticalOffsetDp: Int,
+  verticalBaselineCorrectionDp: Int,
   horizontalOffsetDp: Int,
   compactWidthDp: Int,
   compactHeightDp: Int,
@@ -29,10 +30,12 @@ fun IslandCalibrationPreview(
         .background(Color(0xFF171717))
   ) {
     val centerX = size.width / 2f + horizontalOffsetDp.dp.toPx()
-    val centerY = size.height * 0.4f + verticalOffsetDp.dp.toPx()
+    val anchorY =
+      size.height * 0.4f + verticalBaselineCorrectionDp.dp.toPx()
+    val centerY = anchorY + verticalOffsetDp.dp.toPx()
     val width = compactWidthDp.dp.toPx()
     val height = compactHeightDp.dp.toPx()
-    drawCircle(Color.Black, radius = 8.dp.toPx(), center = Offset(size.width / 2f, size.height * 0.4f))
+    drawCircle(Color.Black, radius = 8.dp.toPx(), center = Offset(size.width / 2f, anchorY))
     drawLine(
       color = Color.White.copy(alpha = 0.55f),
       start = Offset(centerX - 18.dp.toPx(), centerY),

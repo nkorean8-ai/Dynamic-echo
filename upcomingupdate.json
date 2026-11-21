@@ -8,7 +8,8 @@
     "Library UI: separate the Library overview into swipeable In App Library and Spotify underlined source tabs with separate sort controls, circular horizontal playlist preview, adaptive grid and inline track search for Spotify playlists, and animated refresh sync status messages (#808)",
     "Dynamic Island: optional overlay-service-hosted monochrome now-playing pill with cutout-aware positioning, track-change expansion, playback gestures, idle timeout, and explicit overlay permission flow",
     "Dynamic Island interactions and appearance: compact-pill tap expansion, swipe-based track changes, seek slider, outside-tap/up-swipe collapse, spring-morphed window sizing, 3/5/8/10-second or Off timeout, cutout calibration, app-renderer reuse, and optional artwork-palette backgrounds",
-    "Mini-player controls: choose button controls or gesture mode across the standard, legacy, and floating mini-players, with TalkBack actions"
+    "Mini-player controls: choose button controls or gesture mode across the standard, legacy, and floating mini-players, with TalkBack actions",
+    "Mini-player swipe feedback: directional in-place artwork and metadata transitions across standard, legacy, and floating layouts"
   ],
   "bug_fixes": [
     "Stats: fix NullPointerException crash when opening Stats by making SongWithStats thumbnailUrl and play counts safely nullable, removing unsafe forced unwraps, and guarding date sequence boundaries (#646)",
@@ -29,7 +30,9 @@
     "Dynamic Island: prevent artwork-palette crashes by using a solid fallback unless at least two distinct swatches are available",
     "Dynamic Island: capture compact-pill gestures at the overlay root while forwarding expanded-panel touches to Compose",
     "Dynamic Island: hide promptly when playback stops or ends, and auto-hide intentional pauses after 60 seconds by default",
-    "Dynamic Island: fall back to the existing MediaSession activity PendingIntent when triple-tap app launch is rejected by background-start restrictions"
+    "Dynamic Island: fall back to the existing MediaSession activity PendingIntent when triple-tap app launch is rejected by background-start restrictions",
+    "Dynamic Island: stabilize cutout anchoring with calibrated path bounds and preserve the baseline shown in the Appearance preview",
+    "Dynamic Island: route root touch events directly to the gesture state machine while preserving Compose seek-slider input"
   ],
   "contributors": []
 }

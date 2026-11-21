@@ -97,6 +97,7 @@ import echo.music.iad1tya.constants.IslandInvertSwipesKey
 import echo.music.iad1tya.constants.IslandShowTrackChangeKey
 import echo.music.iad1tya.constants.IslandSingleTapExpandKey
 import echo.music.iad1tya.constants.IslandSliderStyleKey
+import echo.music.iad1tya.constants.IslandVerticalBaselineCorrectionKey
 import echo.music.iad1tya.constants.IslandVerticalCalibrationKey
 import echo.music.iad1tya.constants.LibraryFilter
 import echo.music.iad1tya.constants.ListenTogetherInTopBarKey
@@ -279,6 +280,8 @@ fun AppearanceSettings(
     rememberPreference(IslandHideInForegroundKey, defaultValue = true)
   val (islandVerticalCalibration, onIslandVerticalCalibrationChange) =
     rememberPreference(IslandVerticalCalibrationKey, defaultValue = 0)
+  val (islandVerticalBaselineCorrection, _) =
+    rememberPreference(IslandVerticalBaselineCorrectionKey, defaultValue = 0)
   val (islandHorizontalOffset, onIslandHorizontalOffsetChange) =
     rememberPreference(IslandHorizontalOffsetKey, defaultValue = 0)
   val (islandCompactWidth, onIslandCompactWidthChange) =
@@ -1667,6 +1670,7 @@ fun AppearanceSettings(
                   )
                   IslandCalibrationPreview(
                     verticalOffsetDp = islandVerticalCalibration,
+                    verticalBaselineCorrectionDp = islandVerticalBaselineCorrection,
                     horizontalOffsetDp = islandHorizontalOffset,
                     compactWidthDp = islandCompactWidth,
                     compactHeightDp = islandCompactHeight,

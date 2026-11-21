@@ -22,11 +22,18 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -34,11 +41,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +51,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,20 +62,27 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -104,6 +116,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import androidx.palette.graphics.Palette
 import javax.inject.Inject
 import kotlin.math.PI
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -111,7 +124,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -126,6 +138,13 @@ private const val ISLAND_LOG_TAG = "IslandOverlayService"
 private const val EXPANDED_WIDTH_DP = 360
 private const val EXPANDED_HEIGHT_DP = 112
 private const val MAX_PALETTE_CACHE_SIZE = 8
+private const val COMPACT_ART_SIZE_DP = 28
+private const val COMPACT_WAVEFORM_WIDTH_DP = 20
+private const val COMPACT_HORIZONTAL_PADDING_DP = 7
+private const val CENTER_GAP_MARGIN_DP = 8
+private const val ISLAND_VISIBILITY_DURATION_MS = 200L
+private const val ISLAND_HIDDEN_SCALE = 0.94f
+private const val SWIPE_TRANSITION_DURATION_MS = 600L
 
 @AndroidEntryPoint
 class IslandOverlayService : Service() {
@@ -134,24 +153,33 @@ class IslandOverlayService : Service() {
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   private val gestureHandler = Handler(Looper.getMainLooper())
   private var windowManager: WindowManager? = null
-  private var overlayView: ComposeView? = null
+  private var overlayView: IslandOverlayComposeView? = null
   private var overlayViewAdded = false
   private var hideJob: Job? = null
+  private var visibilityJob: Job? = null
   private var inactivityJob: Job? = null
   private var trackChangeJob: Job? = null
+  private var swipeDirectionResetJob: Job? = null
+  private var collapseAnimationFallback: Runnable? = null
   private var isSeekDragging = false
-  private var compactTapCount = 0
-  private var compactTapTimeout: Runnable? = null
-  private var compactLastTapX = 0f
-  private var compactLastTapY = 0f
-  private var compactLastTapUpTime = 0L
-  private var compactGesturePointerId = MotionEvent.INVALID_POINTER_ID
-  private var compactGestureStartX = 0f
-  private var compactGestureStartY = 0f
-  private var compactGestureDownTime = 0L
-  private var compactGestureActive = false
-  private var compactGestureMoved = false
-  private var compactGestureHandled = false
+  private var seekSliderBounds: ComposeRect? = null
+  private var tapCount = 0
+  private var tapTimeout: Runnable? = null
+  private var lastTapX = 0f
+  private var lastTapY = 0f
+  private var lastTapUpTime = 0L
+  private var pendingTapPhase = IslandPhase.COLLAPSED
+  private var gesturePointerId = MotionEvent.INVALID_POINTER_ID
+  private var gestureStartX = 0f
+  private var gestureStartY = 0f
+  private var gestureDownTime = 0L
+  private var gestureStartPhase = IslandPhase.COLLAPSED
+  private var gestureActive = false
+  private var gestureMoved = false
+  private var gestureHandled = false
+  private var islandVisible by mutableStateOf(false)
+  private var swipeOffsetPx by mutableFloatStateOf(0f)
+  private var swipeDirection by mutableStateOf(0)
   private var pausedAutoHideSeconds: Int? = null
   private var pausedAutoHidePlaybackKey: String? = null
   private var phase by mutableStateOf(IslandPhase.COLLAPSED)
@@ -174,7 +202,6 @@ class IslandOverlayService : Service() {
         }
       }
     }
-
   override fun onCreate() {
     super.onCreate()
     if (!controller.hasOverlayPermission()) {
@@ -263,7 +290,7 @@ class IslandOverlayService : Service() {
     }
     val state = controller.playback.value ?: run {
       collapseImmediately()
-      removeOverlay()
+      hideOverlayWithTransition()
       return
     }
     val playbackKey = state.visibilityKey()
@@ -274,9 +301,14 @@ class IslandOverlayService : Service() {
       autoHiddenPlaybackKey = null
     }
     val autoHiddenCurrentTrack = autoHiddenPlaybackKey == playbackKey
-    if (!settings.enabled || autoHiddenCurrentTrack) {
+    if (!settings.enabled) {
       collapseImmediately()
       removeOverlay()
+      return
+    }
+    if (autoHiddenCurrentTrack) {
+      collapseImmediately()
+      hideOverlayWithTransition()
       return
     }
     if (state.isPlaying) {
@@ -290,10 +322,12 @@ class IslandOverlayService : Service() {
     if (wasNewTrack) lastTrackId = state.trackId
     if (overlayView == null) {
       addOverlay()
-    } else {
-      overlayView?.invalidate()
     }
     if (overlayView == null) return
+    visibilityJob?.cancel()
+    visibilityJob = null
+    islandVisible = true
+    overlayView?.invalidate()
     if (wasNewTrack) {
       if (settings.showTrackChange) beginExpand(trackChange = true)
       else if (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) collapseImmediately()
@@ -308,7 +342,11 @@ class IslandOverlayService : Service() {
   private fun addOverlay() {
     overlayOwners = OverlayOwners()
     val view =
-      ComposeView(this).apply {
+      IslandOverlayComposeView(
+        context = this,
+        shouldForwardToCompose = ::isSeekSliderTouch,
+        onIslandTouch = ::handleIslandGesture,
+      ).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         setViewTreeLifecycleOwner(overlayOwners)
         setViewTreeSavedStateRegistryOwner(overlayOwners)
@@ -319,31 +357,18 @@ class IslandOverlayService : Service() {
             settings = controller.settings.collectAsState().value,
             renderers = controller.renderers(),
             phase = phase,
-            onCollapse = { beginCollapse() },
             onCollapseAnimationFinished = ::finishCollapseAnimation,
-            onUserInteraction = ::resetInactivityTimer,
+            visible = islandVisible,
+            swipeOffsetPx = swipeOffsetPx,
+            swipeDirection = swipeDirection,
+            compactWidthDp = compactWidthDp(controller.settings.value),
+            centerGapDp = centerGapDp(),
             isSeekDragging = { isSeekDragging },
+            onSeekBoundsChanged = { seekSliderBounds = it },
             onSeekStart = ::startSeekDrag,
             onSeekChange = ::seekDuringDrag,
             onSeekEnd = ::endSeekDrag,
-            onPlayPause = controller::playPause,
-            onPrevious = controller::previous,
-            onNext = controller::next,
           )
-        }
-        setOnTouchListener { _, event ->
-          if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
-            Log.d(TAG, "Overlay received ACTION_OUTSIDE in phase=$phase")
-            if (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) {
-              beginCollapse()
-            }
-            true
-          } else if (phase == IslandPhase.COLLAPSED || compactGestureActive) {
-            handleCompactGesture(event)
-            true
-          } else {
-            false
-          }
         }
         isClickable = true
         ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
@@ -366,7 +391,7 @@ class IslandOverlayService : Service() {
     val settings = controller.settings.value
     val params =
       WindowManager.LayoutParams(
-        dp(if (compact) settings.compactWidthDp else expandedWindowWidthDp()),
+        dp(if (compact) compactWidthDp(settings) else expandedWindowWidthDp()),
         dp(if (compact) settings.compactHeightDp else EXPANDED_HEIGHT_DP),
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
@@ -383,19 +408,17 @@ class IslandOverlayService : Service() {
     try {
       manager.addView(view, params)
       overlayViewAdded = true
-      Log.d(
+      val cutout = currentDisplayCutout()
+      val anchor = resolveIslandCutoutAnchor(cutout, resources.displayMetrics.density)
+      Log.i(
         TAG,
-        "Overlay added: type=${params.type}, flags=0x${params.flags.toString(16)}, " +
-          "size=${params.width}x${params.height}, position=(${params.x},${params.y})",
+        "Overlay attached density=${resources.displayMetrics.density}, " +
+          "display=${resources.displayMetrics.widthPixels}x${resources.displayMetrics.heightPixels}, " +
+          "statusInset=${initialTopInset()}, " +
+          "cutoutRects=${cutout?.boundingRects}, pathBounds=${anchor?.pathBounds}, " +
+          "anchor=${if (anchor?.usesPath == true) "path" else "rect/fallback"}, " +
+          "chosen=(${params.x},${params.y}), size=${params.width}x${params.height}",
       )
-      view.post {
-        if (overlayView === view) {
-          Log.d(
-            TAG,
-            "Overlay root attached=${view.isAttachedToWindow}, bounds=${view.width}x${view.height}",
-          )
-        }
-      }
       if (view.isAttachedToWindow) ViewCompat.requestApplyInsets(view)
     } catch (error: WindowManager.BadTokenException) {
       Log.e(TAG, "Unable to attach the island overlay window", error)
@@ -467,28 +490,32 @@ class IslandOverlayService : Service() {
   }
 
   private fun cutoutHorizontalOffset(cutout: android.view.DisplayCutout?): Int {
-    val topCutout =
-      cutout?.boundingRects
-        ?.filter { it.top <= cutout.safeInsetTop }
-        ?.maxByOrNull { it.width().toLong() * it.height().toLong() }
-        ?: return 0
     val displayWidth =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         windowManager?.currentWindowMetrics?.bounds?.width() ?: resources.displayMetrics.widthPixels
       } else {
         resources.displayMetrics.widthPixels
       }
-    return topCutout.centerX() - displayWidth / 2
+    val anchor = resolveIslandCutoutAnchor(cutout, resources.displayMetrics.density)
+    return ((anchor?.centerX ?: (displayWidth / 2f)) - displayWidth / 2f).toInt()
   }
 
   private fun removeOverlay() {
     stopPausedAutoHide()
+    visibilityJob?.cancel()
+    visibilityJob = null
     cancelInactivityTimer()
-    cancelCompactTapSequence()
-    resetCompactGesture()
+    cancelTapSequence()
+    resetGesture()
+    cancelCollapseAnimationFallback()
     trackChangeJob?.cancel()
     trackChangeJob = null
+    swipeDirectionResetJob?.cancel()
+    swipeDirectionResetJob = null
     isSeekDragging = false
+    seekSliderBounds = null
+    islandVisible = false
+    swipeOffsetPx = 0f
     phase = IslandPhase.COLLAPSED
     val manager = windowManager
     val view = overlayView
@@ -521,9 +548,24 @@ class IslandOverlayService : Service() {
   private fun isCompactPhase(value: IslandPhase): Boolean =
     value == IslandPhase.COLLAPSED || value == IslandPhase.COLLAPSING
 
+  private fun hideOverlayWithTransition() {
+    val view = overlayView ?: return
+    if (!islandVisible) {
+      removeOverlay()
+      return
+    }
+    visibilityJob?.cancel()
+    islandVisible = false
+    visibilityJob =
+      serviceScope.launch {
+        delay(ISLAND_VISIBILITY_DURATION_MS)
+        if (overlayView === view && !islandVisible) removeOverlay()
+      }
+  }
+
   private fun beginExpand(trackChange: Boolean) {
     if (!controller.hasOverlayPermission() || appInForeground) return
-    cancelCompactTapSequence()
+    cancelTapSequence()
     when (phase) {
       IslandPhase.EXPANDED,
       IslandPhase.EXPANDING -> {
@@ -533,6 +575,7 @@ class IslandOverlayService : Service() {
       IslandPhase.COLLAPSED -> {
         val view = overlayView ?: return
         phase = IslandPhase.EXPANDING
+        swipeOffsetPx = 0f
         resizeOverlay(expanded = true)
         if (overlayView !== view) return
         if (!view.isAttachedToWindow) {
@@ -570,12 +613,18 @@ class IslandOverlayService : Service() {
         trackChangeJob = null
         phase = IslandPhase.COLLAPSING
         cancelInactivityTimer()
+        cancelCollapseAnimationFallback()
+        collapseAnimationFallback =
+          Runnable {
+            if (phase == IslandPhase.COLLAPSING) finishCollapseAnimation()
+          }.also { gestureHandler.postDelayed(it, COLLAPSE_ANIMATION_TIMEOUT_MS) }
       }
     }
   }
 
   private fun finishCollapseAnimation() {
     if (phase != IslandPhase.COLLAPSING) return
+    cancelCollapseAnimationFallback()
     resizeOverlay(expanded = false)
     if (overlayView?.isAttachedToWindow != true) {
       removeOverlay()
@@ -583,11 +632,13 @@ class IslandOverlayService : Service() {
     }
     phase = IslandPhase.COLLAPSED
     isSeekDragging = false
+    swipeOffsetPx = 0f
   }
 
   private fun collapseImmediately() {
-    cancelCompactTapSequence()
-    resetCompactGesture()
+    cancelTapSequence()
+    resetGesture()
+    cancelCollapseAnimationFallback()
     trackChangeJob?.cancel()
     trackChangeJob = null
     cancelInactivityTimer()
@@ -599,6 +650,11 @@ class IslandOverlayService : Service() {
     }
   }
 
+  private fun cancelCollapseAnimationFallback() {
+    collapseAnimationFallback?.let(gestureHandler::removeCallbacks)
+    collapseAnimationFallback = null
+  }
+
   private fun resizeOverlay(
     expanded: Boolean,
     viewOverride: View? = null,
@@ -607,7 +663,7 @@ class IslandOverlayService : Service() {
     val view = viewOverride ?: overlayView ?: return
     val params = paramsOverride ?: view.layoutParams as? WindowManager.LayoutParams ?: return
     val settings = controller.settings.value
-    params.width = dp(if (expanded) expandedWindowWidthDp() else settings.compactWidthDp)
+    params.width = dp(if (expanded) expandedWindowWidthDp() else compactWidthDp(settings))
     params.height = dp(if (expanded) EXPANDED_HEIGHT_DP else settings.compactHeightDp)
     val cutout =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -627,16 +683,36 @@ class IslandOverlayService : Service() {
   ): Int {
     val activeCutout =
       cutout ?: view?.rootWindowInsets?.displayCutout ?: currentDisplayCutout()
-    val topCutout =
-      activeCutout?.boundingRects
-        ?.filter { it.top <= activeCutout.safeInsetTop }
-        ?.maxByOrNull { it.width().toLong() * it.height().toLong() }
+    val anchor = resolveIslandCutoutAnchor(activeCutout, resources.displayMetrics.density)
     val anchorY =
-      topCutout?.centerY()
+      anchor?.centerY?.toInt()
         ?: view?.let(::getStatusAndCutoutTop)
         ?: initialTopInset()
-    return anchorY - dp(settings.compactHeightDp / 2) + dp(settings.verticalCalibrationDp)
+    val baseline =
+      if (anchor?.usesPath == true) 0 else settings.verticalBaselineCorrectionDp
+    return anchorY - dp(settings.compactHeightDp / 2) +
+      dp(settings.verticalCalibrationDp + baseline)
   }
+
+  private fun centerGapDp(): Int {
+    val cutout = currentDisplayCutout()
+    val anchor = resolveIslandCutoutAnchor(cutout, resources.displayMetrics.density)
+    val cutoutWidthPx =
+      if (anchor?.usesPath == true) {
+        anchor.pathBounds?.width()
+      } else {
+        anchor?.boundingRect?.width()?.toFloat()
+      }
+    val cutoutWidthDp = cutoutWidthPx?.div(resources.displayMetrics.density) ?: 28f
+    return cutoutWidthDp.toInt().coerceAtLeast(1) + CENTER_GAP_MARGIN_DP * 2
+  }
+
+  private fun compactWidthDp(settings: IslandSettings): Int =
+    maxOf(
+      settings.compactWidthDp,
+      COMPACT_ART_SIZE_DP + COMPACT_WAVEFORM_WIDTH_DP + centerGapDp() +
+        COMPACT_HORIZONTAL_PADDING_DP * 2,
+    )
 
   private fun updateOverlayLayout(view: View, params: WindowManager.LayoutParams) {
     if (!view.isAttachedToWindow) return
@@ -687,7 +763,7 @@ class IslandOverlayService : Service() {
       trackChangeJob = null
     }
     cancelInactivityTimer()
-    if (phase != IslandPhase.EXPANDED || isSeekDragging) return
+    if (phase != IslandPhase.EXPANDED || isSeekDragging || gestureActive) return
     val seconds = controller.settings.value.inactivitySeconds
     if (seconds <= 0) return
     inactivityJob =
@@ -703,123 +779,181 @@ class IslandOverlayService : Service() {
     inactivityJob = null
   }
 
-  private fun handleCompactGesture(event: MotionEvent) {
+  private fun isSeekSliderTouch(x: Float, y: Float): Boolean =
+    (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) &&
+      seekSliderBounds?.contains(Offset(x, y)) == true
+
+  private fun handleIslandGesture(event: MotionEvent): Boolean {
+    if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
+      Log.d(TAG, "Root dispatch ACTION_OUTSIDE phase=$phase")
+      if (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) beginCollapse()
+      return true
+    }
+
     when (event.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
-        if (phase != IslandPhase.COLLAPSED || event.pointerCount != 1) {
-          cancelCompactTapSequence()
-          resetCompactGesture()
-          return
+        Log.d(TAG, "Root dispatch DOWN phase=$phase x=${event.x} y=${event.y}")
+        if (phase == IslandPhase.EXPANDING || phase == IslandPhase.COLLAPSING ||
+          event.pointerCount != 1
+        ) {
+          cancelTapSequence()
+          resetGesture()
+          return true
         }
 
         val tapSlop = ViewConfiguration.get(this).scaledDoubleTapSlop.toFloat()
-        val elapsedSinceTap = event.eventTime - compactLastTapUpTime
+        val elapsedSinceTap = event.eventTime - lastTapUpTime
         if (
-          compactTapCount > 0 &&
-            (elapsedSinceTap > MULTI_TAP_TIMEOUT_MS ||
-              distance(event.x - compactLastTapX, event.y - compactLastTapY) > tapSlop)
+          tapCount > 0 &&
+            (pendingTapPhase != phase ||
+              elapsedSinceTap > MULTI_TAP_TIMEOUT_MS ||
+              distance(event.x - lastTapX, event.y - lastTapY) > tapSlop)
         ) {
-          dispatchPendingCompactTap()
-          if (phase != IslandPhase.COLLAPSED) return
+          dispatchPendingTap()
+          if (phase == IslandPhase.EXPANDING || phase == IslandPhase.COLLAPSING) return true
         }
 
-        compactTapTimeout?.let(gestureHandler::removeCallbacks)
-        compactTapTimeout = null
-        compactGesturePointerId = event.getPointerId(0)
-        compactGestureStartX = event.x
-        compactGestureStartY = event.y
-        compactGestureDownTime = event.downTime
-        compactGestureActive = true
-        compactGestureMoved = false
-        compactGestureHandled = false
+        tapTimeout?.let(gestureHandler::removeCallbacks)
+        tapTimeout = null
+        gesturePointerId = event.getPointerId(0)
+        gestureStartX = event.x
+        gestureStartY = event.y
+        gestureDownTime = event.downTime
+        gestureStartPhase = phase
+        gestureActive = true
+        gestureMoved = false
+        gestureHandled = false
+        if (phase == IslandPhase.EXPANDED) cancelInactivityTimer()
+        return true
       }
 
       MotionEvent.ACTION_MOVE -> {
-        if (!compactGestureActive) return
-        val pointerIndex = event.findPointerIndex(compactGesturePointerId)
+        if (!gestureActive) return true
+        val pointerIndex = event.findPointerIndex(gesturePointerId)
         if (pointerIndex < 0) {
-          cancelCompactTapSequence()
-          resetCompactGesture()
-          return
+          cancelTapSequence()
+          resetGesture()
+          return true
         }
 
-        val deltaX = event.getX(pointerIndex) - compactGestureStartX
-        val deltaY = event.getY(pointerIndex) - compactGestureStartY
+        val deltaX = event.getX(pointerIndex) - gestureStartX
+        val deltaY = event.getY(pointerIndex) - gestureStartY
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
-        if (!compactGestureMoved && distance(deltaX, deltaY) > touchSlop) {
-          compactGestureMoved = true
-          cancelCompactTapSequence()
+        if (!gestureMoved && distance(deltaX, deltaY) > touchSlop) {
+          gestureMoved = true
+          Log.d(TAG, "Root dispatch MOVE crossed touch slop phase=$gestureStartPhase")
+          cancelTapSequence()
         }
+        if (gestureMoved && deltaX != 0f) swipeDirection = if (deltaX > 0f) 1 else -1
+        val maxFollowPx = dp(SWIPE_FOLLOW_MAX_DP).toFloat()
+        swipeOffsetPx = deltaX.coerceIn(-maxFollowPx, maxFollowPx)
 
         val swipeThreshold = maxOf(touchSlop * 2f, dp(COMPACT_SWIPE_THRESHOLD_DP).toFloat())
-        if (
-          compactGestureMoved &&
-            !compactGestureHandled &&
+        if (!gestureHandled) {
+          when {
+            gestureStartPhase == IslandPhase.EXPANDED &&
+              deltaY < -swipeThreshold &&
+              kotlin.math.abs(deltaY) > kotlin.math.abs(deltaX) * SWIPE_AXIS_RATIO -> {
+              gestureHandled = true
+              swipeOffsetPx = 0f
+              swipeDirection = 0
+              Log.d(TAG, "Gesture callback swipe-up -> collapse")
+              beginCollapse()
+            }
             kotlin.math.abs(deltaX) >= swipeThreshold &&
-            kotlin.math.abs(deltaX) > kotlin.math.abs(deltaY) * SWIPE_AXIS_RATIO
-        ) {
-          compactGestureHandled = true
-          if ((deltaX > 0f) != controller.settings.value.invertSwipes) {
-            controller.next()
-          } else {
-            controller.previous()
+              kotlin.math.abs(deltaX) > kotlin.math.abs(deltaY) * SWIPE_AXIS_RATIO -> {
+              gestureHandled = true
+              val next = (deltaX > 0f) != controller.settings.value.invertSwipes
+              swipeDirection = if (deltaX > 0f) 1 else -1
+              swipeDirectionResetJob?.cancel()
+              swipeDirectionResetJob =
+                serviceScope.launch {
+                  delay(SWIPE_TRANSITION_DURATION_MS)
+                  swipeDirection = 0
+                  swipeDirectionResetJob = null
+                }
+              performSwipeHaptic()
+              Log.d(TAG, "Gesture callback swipe ${if (next) "next" else "previous"}")
+              if (next) controller.next() else controller.previous()
+            }
           }
         }
+        return true
       }
 
       MotionEvent.ACTION_UP -> {
-        if (compactGestureActive &&
-          !compactGestureMoved &&
-          !compactGestureHandled &&
-          event.eventTime - compactGestureDownTime <= ViewConfiguration.getLongPressTimeout() &&
-          phase == IslandPhase.COLLAPSED
+        Log.d(TAG, "Root dispatch UP phase=$phase")
+        val wasHandled = gestureHandled
+        if (gestureActive &&
+          !gestureMoved &&
+          !gestureHandled &&
+          event.eventTime - gestureDownTime <= ViewConfiguration.getLongPressTimeout() &&
+          phase == gestureStartPhase
         ) {
-          recordCompactTap(event.x, event.y, event.eventTime)
-        } else if (compactGestureActive && !compactGestureMoved && !compactGestureHandled) {
-          cancelCompactTapSequence()
+          recordTap(event.x, event.y, event.eventTime, gestureStartPhase)
+        } else if (gestureActive && !gestureMoved && !gestureHandled) {
+          cancelTapSequence()
         }
-        resetCompactGesture()
+        resetGesture()
+        swipeOffsetPx = 0f
+        if (!wasHandled) swipeDirection = 0
+        if (phase == IslandPhase.EXPANDED) resetInactivityTimer()
+        return true
       }
 
       MotionEvent.ACTION_POINTER_DOWN,
       MotionEvent.ACTION_POINTER_UP,
       MotionEvent.ACTION_CANCEL -> {
-        cancelCompactTapSequence()
-        resetCompactGesture()
+        cancelTapSequence()
+        resetGesture()
+        swipeOffsetPx = 0f
+        swipeDirection = 0
+        if (phase == IslandPhase.EXPANDED) resetInactivityTimer()
+        return true
       }
     }
+    return true
   }
 
-  private fun recordCompactTap(x: Float, y: Float, eventTime: Long) {
-    compactTapCount += 1
-    compactLastTapX = x
-    compactLastTapY = y
-    compactLastTapUpTime = eventTime
-    if (compactTapCount == 3) {
-      cancelCompactTapSequence()
-      Log.d(TAG, "Compact triple tap -> open app")
+  private fun recordTap(x: Float, y: Float, eventTime: Long, tapPhase: IslandPhase) {
+    if (tapCount == 0) pendingTapPhase = tapPhase
+    tapCount += 1
+    lastTapX = x
+    lastTapY = y
+    lastTapUpTime = eventTime
+    if (tapCount == 3) {
+      cancelTapSequence()
+      Log.d(TAG, "Gesture callback triple tap -> open app")
       performTapHaptic(tripleTap = true)
       controller.openApp()
       return
     }
 
-    compactTapTimeout =
+    tapTimeout =
       Runnable {
-        compactTapTimeout = null
-        dispatchPendingCompactTap()
+        tapTimeout = null
+        dispatchPendingTap()
       }.also { gestureHandler.postDelayed(it, MULTI_TAP_TIMEOUT_MS) }
   }
 
-  private fun dispatchPendingCompactTap() {
-    val tapCount = compactTapCount
-    cancelCompactTapSequence()
-    when (tapCount) {
-      1 -> if (controller.settings.value.singleTapExpand) {
-        Log.d(TAG, "Compact single tap -> expand")
-        beginExpand(trackChange = false)
+  private fun dispatchPendingTap() {
+    val count = tapCount
+    val tapPhase = pendingTapPhase
+    cancelTapSequence()
+    when (count) {
+      1 -> when (tapPhase) {
+        IslandPhase.COLLAPSED -> if (controller.settings.value.singleTapExpand) {
+          Log.d(TAG, "Gesture callback compact single tap -> expand")
+          beginExpand(trackChange = false)
+        }
+        IslandPhase.EXPANDED -> {
+          Log.d(TAG, "Gesture callback expanded single tap -> reset timeout")
+          resetInactivityTimer()
+        }
+        else -> Unit
       }
       2 -> {
-        Log.d(TAG, "Compact double tap -> play/pause")
+        Log.d(TAG, "Gesture callback double tap -> play/pause")
         performTapHaptic(tripleTap = false)
         controller.playPause()
       }
@@ -843,18 +977,24 @@ class IslandOverlayService : Service() {
     overlayView?.performHapticFeedback(feedback)
   }
 
-  private fun cancelCompactTapSequence() {
-    compactTapTimeout?.let(gestureHandler::removeCallbacks)
-    compactTapTimeout = null
-    compactTapCount = 0
+  private fun performSwipeHaptic() {
+    val settings = controller.settings.value
+    if (!settings.hapticsEnabled || !settings.clickHapticsEnabled) return
+    overlayView?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
   }
 
-  private fun resetCompactGesture() {
-    compactGesturePointerId = MotionEvent.INVALID_POINTER_ID
-    compactGestureDownTime = 0L
-    compactGestureActive = false
-    compactGestureMoved = false
-    compactGestureHandled = false
+  private fun cancelTapSequence() {
+    tapTimeout?.let(gestureHandler::removeCallbacks)
+    tapTimeout = null
+    tapCount = 0
+  }
+
+  private fun resetGesture() {
+    gesturePointerId = MotionEvent.INVALID_POINTER_ID
+    gestureDownTime = 0L
+    gestureActive = false
+    gestureMoved = false
+    gestureHandled = false
   }
 
   private fun distance(x: Float, y: Float): Float =
@@ -903,7 +1043,8 @@ class IslandOverlayService : Service() {
             currentState.visibilityKey() == playbackKey
         ) {
           autoHiddenPlaybackKey = playbackKey
-          removeOverlay()
+          collapseImmediately()
+          hideOverlayWithTransition()
         }
       }.also { job ->
         job.invokeOnCompletion {
@@ -959,7 +1100,7 @@ class IslandOverlayService : Service() {
     val screenWidthDp = (widthPixels / resources.displayMetrics.density).toInt()
     return minOf(
       EXPANDED_WIDTH_DP,
-      (screenWidthDp - 16).coerceAtLeast(controller.settings.value.compactWidthDp),
+      (screenWidthDp - 16).coerceAtLeast(compactWidthDp(controller.settings.value)),
     )
   }
 
@@ -1006,6 +1147,55 @@ class IslandOverlayService : Service() {
     }
   }
 
+  private class IslandOverlayComposeView(
+    context: Context,
+    private val shouldForwardToCompose: (Float, Float) -> Boolean,
+    private val onIslandTouch: (MotionEvent) -> Boolean,
+  ) : FrameLayout(context) {
+    private val composeView = ComposeView(context)
+    private var forwardingSeekGesture = false
+
+    init {
+      addView(
+        composeView,
+        LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
+      )
+    }
+
+    fun setContent(content: @Composable () -> Unit) {
+      composeView.setContent(content)
+    }
+
+    fun setViewCompositionStrategy(strategy: ViewCompositionStrategy) {
+      composeView.setViewCompositionStrategy(strategy)
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+      val action = event.actionMasked
+      if (action == MotionEvent.ACTION_OUTSIDE) {
+        forwardingSeekGesture = false
+        return onIslandTouch(event)
+      }
+
+      if (forwardingSeekGesture) {
+        val handled = super.dispatchTouchEvent(event)
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+          forwardingSeekGesture = false
+        }
+        return handled
+      }
+
+      if (action == MotionEvent.ACTION_DOWN && shouldForwardToCompose(event.x, event.y)) {
+        forwardingSeekGesture = true
+        Log.d(ISLAND_LOG_TAG, "Root dispatch DOWN routed to Compose seek slider")
+        return super.dispatchTouchEvent(event)
+      }
+
+      val handled = onIslandTouch(event)
+      return if (handled) true else super.dispatchTouchEvent(event)
+    }
+  }
+
   private companion object {
     const val TAG = ISLAND_LOG_TAG
     const val CHANNEL_ID = "echo_island"
@@ -1014,6 +1204,8 @@ class IslandOverlayService : Service() {
     const val MULTI_TAP_TIMEOUT_MS = 300L
     const val COMPACT_SWIPE_THRESHOLD_DP = 36
     const val SWIPE_AXIS_RATIO = 1.2f
+    const val SWIPE_FOLLOW_MAX_DP = 10
+    const val COLLAPSE_ANIMATION_TIMEOUT_MS = 1500L
   }
 }
 
@@ -1023,22 +1215,23 @@ private fun IslandContent(
   settings: IslandSettings,
   renderers: IslandRenderers?,
   phase: IslandPhase,
-  onCollapse: () -> Unit,
   onCollapseAnimationFinished: () -> Unit,
-  onUserInteraction: () -> Unit,
+  visible: Boolean,
+  swipeOffsetPx: Float,
+  swipeDirection: Int,
+  compactWidthDp: Int,
+  centerGapDp: Int,
   isSeekDragging: () -> Boolean,
+  onSeekBoundsChanged: (ComposeRect) -> Unit,
   onSeekStart: () -> Unit,
   onSeekChange: (Long) -> Unit,
   onSeekEnd: () -> Unit,
-  onPlayPause: () -> Unit,
-  onPrevious: () -> Unit,
-  onNext: () -> Unit,
 ) {
   if (state == null) return
   val expandedWidthDp =
     minOf(
       EXPANDED_WIDTH_DP,
-      (LocalConfiguration.current.screenWidthDp - 16).coerceAtLeast(settings.compactWidthDp),
+      (LocalConfiguration.current.screenWidthDp - 16).coerceAtLeast(compactWidthDp),
     )
   val isExpanded = phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING
   val showExpandedContent = phase == IslandPhase.EXPANDED
@@ -1061,16 +1254,27 @@ private fun IslandContent(
     } else {
       emptyList()
     }
-    val morphWidthState =
-      animateDpAsState(
+  var finishedMorphComponents by remember { mutableStateOf(emptySet<String>()) }
+  LaunchedEffect(phase) {
+    finishedMorphComponents = emptySet()
+  }
+  fun onMorphAnimationFinished(component: String) {
+    if (phase != IslandPhase.COLLAPSING || component in finishedMorphComponents) return
+    val finished = finishedMorphComponents + component
+    finishedMorphComponents = finished
+    if (finished.size == 3) onCollapseAnimationFinished()
+  }
+  val morphWidthState =
+    animateDpAsState(
       targetValue =
-        if (showExpandedContent) expandedWidthDp.dp else settings.compactWidthDp.dp,
+        if (showExpandedContent) expandedWidthDp.dp else compactWidthDp.dp,
       animationSpec =
         spring(
           dampingRatio = Spring.DampingRatioMediumBouncy,
           stiffness = Spring.StiffnessMedium,
         ),
       label = "islandWidth",
+      finishedListener = { onMorphAnimationFinished("width") },
     )
   val morphWidth by morphWidthState
   val morphHeightState =
@@ -1083,6 +1287,7 @@ private fun IslandContent(
           stiffness = Spring.StiffnessMedium,
         ),
       label = "islandHeight",
+      finishedListener = { onMorphAnimationFinished("height") },
     )
   val morphHeight by morphHeightState
   val cornerRadiusState =
@@ -1094,92 +1299,48 @@ private fun IslandContent(
           stiffness = Spring.StiffnessMedium,
         ),
       label = "islandCornerRadius",
+      finishedListener = { onMorphAnimationFinished("corner") },
     )
   val cornerRadius by cornerRadiusState
-  LaunchedEffect(phase, settings.compactWidthDp, settings.compactHeightDp) {
-    if (phase != IslandPhase.COLLAPSING) return@LaunchedEffect
-    snapshotFlow {
-      morphWidthState.value == settings.compactWidthDp.dp &&
-        morphHeightState.value == settings.compactHeightDp.dp &&
-        cornerRadiusState.value == 19.dp
-    }.first { it }
-    onCollapseAnimationFinished()
-  }
   val shape = RoundedCornerShape(cornerRadius)
-  val interactionSource = remember { MutableInteractionSource() }
-  val swipeCollapseThresholdPx = with(LocalDensity.current) { 12.dp.toPx() }
+  val visibilityAlpha by
+    animateFloatAsState(
+      targetValue = if (visible) 1f else 0f,
+      animationSpec = tween(ISLAND_VISIBILITY_DURATION_MS.toInt()),
+      label = "islandVisibilityAlpha",
+    )
+  val visibilityScale by
+    animateFloatAsState(
+      targetValue = if (visible) 1f else ISLAND_HIDDEN_SCALE,
+      animationSpec = tween(ISLAND_VISIBILITY_DURATION_MS.toInt()),
+      label = "islandVisibilityScale",
+    )
+  val animatedSwipeOffset by
+    animateFloatAsState(
+      targetValue = swipeOffsetPx,
+      animationSpec =
+        spring(
+          dampingRatio = Spring.DampingRatioNoBouncy,
+          stiffness = Spring.StiffnessLow,
+        ),
+      label = "islandSwipeOffset",
+    )
+  val trackVisual = IslandTrackVisual(state.trackId, state.title, state.artist, state.artworkUri)
   Box(
-    modifier = Modifier.fillMaxSize(),
+    modifier =
+      Modifier.fillMaxSize().graphicsLayer {
+        alpha = visibilityAlpha
+        scaleX = visibilityScale
+        scaleY = visibilityScale
+        transformOrigin = TransformOrigin(0.5f, 0f)
+      },
     contentAlignment = Alignment.TopCenter,
   ) {
     Box(
       modifier =
         Modifier.width(morphWidth)
           .height(morphHeight)
-          .clip(shape)
-          .then(
-            if (isExpanded) {
-              Modifier.combinedClickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onUserInteraction,
-                onDoubleClick = {
-                  onUserInteraction()
-                  onPlayPause()
-                },
-              )
-            } else {
-              Modifier
-            }
-          )
-          .pointerInput(isExpanded) {
-            if (!isExpanded) return@pointerInput
-            awaitEachGesture {
-              awaitFirstDown(pass = PointerEventPass.Initial)
-              onUserInteraction()
-              do {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-              } while (event.changes.any { it.pressed })
-            }
-          }
-          .pointerInput(isExpanded, settings.invertSwipes) {
-            if (!isExpanded) return@pointerInput
-            var dragStartedOnSlider = false
-            var dragHandled = false
-            var totalDragX = 0f
-            var totalDragY = 0f
-            detectDragGestures(
-              onDragStart = {
-                dragStartedOnSlider = isSeekDragging()
-                dragHandled = false
-                totalDragX = 0f
-                totalDragY = 0f
-              },
-              onDrag = { _, amount ->
-                if (dragHandled) return@detectDragGestures
-                totalDragX += amount.x
-                totalDragY += amount.y
-                if (!dragStartedOnSlider) {
-                  when {
-                    totalDragY < -swipeCollapseThresholdPx &&
-                      kotlin.math.abs(totalDragY) > kotlin.math.abs(totalDragX) * 1.15f -> {
-                      dragHandled = true
-                      onCollapse()
-                    }
-                    kotlin.math.abs(totalDragX) > swipeCollapseThresholdPx &&
-                      kotlin.math.abs(totalDragX) > kotlin.math.abs(totalDragY) * 1.15f -> {
-                      dragHandled = true
-                      if ((totalDragX > 0f) != settings.invertSwipes) onNext()
-                      else onPrevious()
-                      onUserInteraction()
-                    }
-                  }
-                }
-              },
-              onDragEnd = {},
-              onDragCancel = {},
-            )
-          },
+          .clip(shape),
       contentAlignment = Alignment.TopCenter,
     ) {
       IslandBackgroundLayer(
@@ -1200,19 +1361,29 @@ private fun IslandContent(
           ExpandedIsland(
             state = state,
             isSeekDragging = isSeekDragging,
-            onUserInteraction = onUserInteraction,
             onSeekStart = onSeekStart,
             onSeekChange = onSeekChange,
             onSeekEnd = onSeekEnd,
-            onPlayPause = onPlayPause,
+            onSeekBoundsChanged = onSeekBoundsChanged,
             renderers = renderers,
             sliderStyle =
               if (settings.followPlayerSliderStyle) settings.playerSliderStyle
               else settings.sliderStyle,
             sliderSquiggly = settings.playerSliderSquiggly,
+            trackVisual = trackVisual,
+            swipeOffsetPx = animatedSwipeOffset,
+            swipeDirection = swipeDirection,
           )
         } else {
-          CompactIsland(state, renderers)
+          CompactIsland(
+            state = state,
+            renderers = renderers,
+            trackVisual = trackVisual,
+            compactHeightDp = settings.compactHeightDp,
+            centerGapDp = centerGapDp,
+            swipeOffsetPx = animatedSwipeOffset,
+            swipeDirection = swipeDirection,
+          )
         }
       }
     }
@@ -1220,44 +1391,85 @@ private fun IslandContent(
 }
 
 @Composable
-private fun CompactIsland(state: IslandPlaybackState, renderers: IslandRenderers?) {
-  Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-    Row(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.Center,
-    ) {
-      AsyncImage(
-        model = state.artworkUri,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(50)),
-      )
-      Spacer(Modifier.width(8.dp))
-      if (renderers != null) {
-        renderers.Waveform(
-          isPlaying = state.isPlaying,
-          modifier = Modifier.width(20.dp).height(16.dp),
+private fun CompactIsland(
+  state: IslandPlaybackState,
+  renderers: IslandRenderers?,
+  trackVisual: IslandTrackVisual,
+  compactHeightDp: Int,
+  centerGapDp: Int,
+  swipeOffsetPx: Float,
+  swipeDirection: Int,
+) {
+  Box(Modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.Center) {
+    AnimatedContent(
+      targetState = trackVisual,
+      transitionSpec = { islandTrackTransition(swipeDirection) },
+      modifier =
+        Modifier.fillMaxSize()
+          .offset { androidx.compose.ui.unit.IntOffset(swipeOffsetPx.roundToInt(), 0) }
+          .padding(horizontal = COMPACT_HORIZONTAL_PADDING_DP.dp),
+      label = "islandCompactTrack",
+    ) { track ->
+      Row(
+        modifier = Modifier.fillMaxSize(),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        AsyncImage(
+          model = track.artworkUri,
+          contentDescription = null,
+          contentScale = ContentScale.Crop,
+          modifier =
+            Modifier.size((compactHeightDp - 4).coerceIn(16, 28).dp)
+              .clip(RoundedCornerShape(50)),
         )
-      } else {
-        EqualizerBars(isPlaying = state.isPlaying)
+        Spacer(Modifier.width(centerGapDp.dp).weight(1f))
+        if (renderers != null) {
+          renderers.Waveform(
+            isPlaying = state.isPlaying,
+            modifier =
+              Modifier.width(COMPACT_WAVEFORM_WIDTH_DP.dp)
+                .height((compactHeightDp - 8).coerceIn(12, 16).dp),
+          )
+        } else {
+          Spacer(Modifier.width(COMPACT_WAVEFORM_WIDTH_DP.dp))
+        }
       }
+    }
+    if (kotlin.math.abs(swipeOffsetPx) > 1f) {
+      IslandSwipeHint(
+        direction = swipeDirection,
+        alpha =
+          (kotlin.math.abs(swipeOffsetPx) / with(LocalDensity.current) { 10.dp.toPx() })
+            .coerceIn(0.18f, 0.9f),
+        modifier =
+          Modifier.align(if (swipeDirection > 0) Alignment.CenterEnd else Alignment.CenterStart)
+            .padding(horizontal = 7.dp),
+      )
     }
   }
 }
+
+private data class IslandTrackVisual(
+  val trackId: String?,
+  val title: String,
+  val artist: String,
+  val artworkUri: String?,
+)
 
 @Composable
 private fun ExpandedIsland(
   state: IslandPlaybackState,
   isSeekDragging: () -> Boolean,
-  onUserInteraction: () -> Unit,
   onSeekStart: () -> Unit,
   onSeekChange: (Long) -> Unit,
   onSeekEnd: () -> Unit,
-  onPlayPause: () -> Unit,
+  onSeekBoundsChanged: (ComposeRect) -> Unit,
   renderers: IslandRenderers?,
   sliderStyle: String,
   sliderSquiggly: Boolean,
+  trackVisual: IslandTrackVisual,
+  swipeOffsetPx: Float,
+  swipeDirection: Int,
 ) {
   var sliderPosition by remember(state.trackId) {
     mutableStateOf(state.positionMs.toFloat())
@@ -1269,23 +1481,38 @@ private fun ExpandedIsland(
   }
 
   Column(Modifier.fillMaxSize().padding(12.dp)) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      AsyncImage(
-        model = state.artworkUri,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
+    Box(Modifier.fillMaxWidth().height(42.dp).clipToBounds()) {
+      AnimatedContent(
+        targetState = trackVisual,
+        transitionSpec = { islandTrackTransition(swipeDirection) },
         modifier =
-          Modifier.size(42.dp).combinedClickable(
-            onClick = onUserInteraction,
-            onDoubleClick = {
-              onUserInteraction()
-              onPlayPause()
-            },
-          ),
-      )
-      Column(modifier = Modifier.weight(1f).padding(horizontal = 10.dp)) {
-        Text(state.title, color = Color.White, maxLines = 1)
-        Text(state.artist, color = Color.LightGray, maxLines = 1)
+          Modifier.fillMaxSize()
+            .offset { androidx.compose.ui.unit.IntOffset(swipeOffsetPx.roundToInt(), 0) },
+        label = "islandExpandedTrack",
+      ) { track ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          AsyncImage(
+            model = track.artworkUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(42.dp),
+          )
+          Column(modifier = Modifier.weight(1f).padding(horizontal = 10.dp)) {
+            Text(track.title, color = Color.White, maxLines = 1)
+            Text(track.artist, color = Color.LightGray, maxLines = 1)
+          }
+        }
+      }
+      if (kotlin.math.abs(swipeOffsetPx) > 1f) {
+        IslandSwipeHint(
+          direction = swipeDirection,
+          alpha =
+            (kotlin.math.abs(swipeOffsetPx) / with(LocalDensity.current) { 10.dp.toPx() })
+              .coerceIn(0.18f, 0.9f),
+          modifier =
+            Modifier.align(if (swipeDirection > 0) Alignment.CenterEnd else Alignment.CenterStart)
+              .padding(horizontal = 7.dp),
+        )
       }
     }
     Spacer(Modifier.height(8.dp))
@@ -1293,15 +1520,23 @@ private fun ExpandedIsland(
       val sliderModifier =
         Modifier.fillMaxWidth()
           .height(20.dp)
+          .onGloballyPositioned { onSeekBoundsChanged(it.boundsInRoot()) }
           .pointerInput(onSeekStart, onSeekEnd) {
             awaitEachGesture {
               awaitFirstDown(pass = PointerEventPass.Initial)
+              Log.d(ISLAND_LOG_TAG, "Compose layer seek DOWN")
               onSeekStart()
+              var loggedMove = false
               try {
                 do {
                   val event = awaitPointerEvent(PointerEventPass.Initial)
+                  if (!loggedMove && event.changes.any { it.position != it.previousPosition }) {
+                    Log.d(ISLAND_LOG_TAG, "Compose layer seek MOVE")
+                    loggedMove = true
+                  }
                 } while (event.changes.any { it.pressed })
               } finally {
+                Log.d(ISLAND_LOG_TAG, "Compose layer seek UP/CANCEL")
                 onSeekEnd()
               }
             }
@@ -1335,6 +1570,57 @@ private fun ExpandedIsland(
     } else {
       ProgressLine(state.positionMs, state.durationMs)
     }
+  }
+}
+
+private fun islandTrackTransition(direction: Int) =
+  if (direction == 0) {
+    fadeIn(tween(120)) togetherWith fadeOut(tween(120))
+  } else {
+    (
+      slideInHorizontally(
+        initialOffsetX = { if (direction > 0) -it else it },
+        animationSpec =
+          spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+          ),
+      ) + fadeIn(tween(120))
+    ) togetherWith
+      (
+        slideOutHorizontally(
+          targetOffsetX = { if (direction > 0) it else -it },
+          animationSpec =
+            spring(
+              dampingRatio = Spring.DampingRatioMediumBouncy,
+              stiffness = Spring.StiffnessMedium,
+            ),
+        ) + fadeOut(tween(120))
+      )
+  }
+
+@Composable
+private fun IslandSwipeHint(direction: Int, alpha: Float, modifier: Modifier = Modifier) {
+  Canvas(modifier.size(14.dp)) {
+    val color = Color.White.copy(alpha = alpha)
+    val centerY = size.height / 2f
+    val innerX = if (direction > 0) size.width * 0.35f else size.width * 0.65f
+    val outerX = if (direction > 0) size.width * 0.68f else size.width * 0.32f
+    val strokeWidth = 2.dp.toPx()
+    drawLine(
+      color,
+      Offset(innerX, centerY - size.height * 0.28f),
+      Offset(outerX, centerY),
+      strokeWidth,
+      StrokeCap.Round,
+    )
+    drawLine(
+      color,
+      Offset(outerX, centerY),
+      Offset(innerX, centerY + size.height * 0.28f),
+      strokeWidth,
+      StrokeCap.Round,
+    )
   }
 }
 
@@ -1573,38 +1859,5 @@ private fun ProgressLine(positionMs: Long, durationMs: Long) {
       size = size.copy(width = size.width * progress),
       cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
     )
-  }
-}
-
-@Composable
-private fun EqualizerBars(isPlaying: Boolean) {
-  if (!isPlaying) {
-    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
-      listOf(4, 6, 6, 4).forEach { height ->
-        Box(
-          Modifier.width(2.dp).height(height.dp)
-            .background(Color.White, RoundedCornerShape(2.dp))
-        )
-      }
-    }
-    return
-  }
-
-  val transition = rememberInfiniteTransition(label = "islandBars")
-  val phase by transition.animateFloat(
-    0f,
-    1f,
-    infiniteRepeatable(tween(650), RepeatMode.Reverse),
-    label = "barPhase",
-  )
-  Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
-    repeat(4) { index ->
-      val wave =
-        ((sin((phase.toDouble() + index * 0.21) * 2.0 * PI).toFloat()) + 1f) / 2f
-      Box(
-        Modifier.width(2.dp).height((4f + wave * 9f).dp)
-          .background(Color.White, RoundedCornerShape(2.dp))
-      )
-    }
   }
 }

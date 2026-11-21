@@ -399,8 +399,9 @@ suppresses timeout while dragging and restarts it on drag end. The overlay uses
 spring morph to finish before restoring compact window dimensions. `LIQUID_GLASS` in this
 service uses a dark, artwork-tinted surface because the service Compose tree has no app
 backdrop to sample.
-The root touch listener handles `ACTION_OUTSIDE`, captures the compact-pill gesture stream,
-and forwards expanded-panel inside-window events to Compose. Artwork-derived gradients may
+The overlay root's `dispatchTouchEvent` handler handles `ACTION_OUTSIDE`, captures the
+compact-pill gesture stream before Compose, and forwards expanded-panel seek-slider sequences
+to Compose. Artwork-derived gradients may
 only be drawn with at least two distinct colors; otherwise retain the solid near-black
 fallback. Fresh installs use a 60-second paused-playback auto-hide and 140x32dp compact pill;
 existing DataStore values must remain unchanged.
@@ -416,6 +417,12 @@ vertical/horizontal calibration and compact pill dimensions. Legacy vertical-off
 are translated to preserve their effective placement. Mini-player controls can independently
 use buttons (default) or gesture mode; gesture mode is unavailable when thumbnail swipes are
 disabled or playback is guest-restricted.
+All three mini-player layouts (standard, legacy, and floating) keep playback controls fixed
+while artwork and track metadata follow the bounded horizontal drag. A successful swipe also
+animates the incoming track in the same physical direction as the gesture; preserve RTL action
+mirroring and keep the swipe hint within the clipped content area. A one-time calibration
+migration separates the user's baseline cutout correction from the visible fine-adjustment
+slider, and the settings preview must show both values.
 
 ## Library UI Separation
 

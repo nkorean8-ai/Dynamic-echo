@@ -127,6 +127,12 @@ expanded panel also toggles playback. The shared mini-player
 control-mode setting defaults to buttons; gesture mode hides playback buttons and uses
 horizontal swipes for track changes, double-tap for play/pause, and TalkBack custom actions.
 
+The standard, legacy, and floating mini-players share directional track-change feedback:
+artwork and metadata slide/fade in the physical swipe direction while playback controls and
+the surrounding surface stay fixed. Keep the live drag response bounded to a subtle 10dp,
+with a restrained directional chevron inside the clipped content. Preserve RTL mirroring for
+which track action a swipe requests.
+
 
 ## Music Flow
 

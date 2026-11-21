@@ -2,6 +2,13 @@ package echo.music.iad1tya.ui.player
 
 import android.content.res.Configuration
 import android.os.Build
+import android.view.HapticFeedbackConstants
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -29,6 +36,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -63,6 +71,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -83,7 +92,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -106,6 +117,8 @@ import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
 import echo.music.iad1tya.constants.CropAlbumArtKey
 import echo.music.iad1tya.constants.DarkModeKey
+import echo.music.iad1tya.constants.EnableClickHapticsKey
+import echo.music.iad1tya.constants.EnableHapticsKey
 import echo.music.iad1tya.constants.MiniPlayerBackgroundStyleKey
 import echo.music.iad1tya.constants.MiniPlayerHeight
 import echo.music.iad1tya.constants.MiniPlayerControlsMode
@@ -140,6 +153,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 private data class PolygonCookieShape(val sides: Int, val indent: Float) : Shape {
@@ -343,6 +357,8 @@ private fun NewMiniPlayer(
 
   val swipeSensitivity by rememberPreference(SwipeSensitivityKey, 0.73f)
   val swipeThumbnailPref by rememberPreference(SwipeThumbnailKey, true)
+  val hapticsEnabled by rememberPreference(EnableHapticsKey, false)
+  val clickHapticsEnabled by rememberPreference(EnableClickHapticsKey, true)
 
   val listenTogetherManager = LocalListenTogetherManager.current
   val isListenTogetherGuest = listenTogetherManager?.let { it.isGuestPlaybackRestricted } ?: false
@@ -352,6 +368,9 @@ private fun NewMiniPlayer(
 
   val layoutDirection = LocalLayoutDirection.current
   val coroutineScope = rememberCoroutineScope()
+  val miniPlayerView = LocalView.current
+  val maxSwipeFollowPx = with(LocalDensity.current) { 10.dp.toPx() }
+  val unavailableSwipeResistancePx = with(LocalDensity.current) { 3.dp.toPx() }
 
   val configuration = LocalConfiguration.current
   val isTabletLandscape =
@@ -363,6 +382,10 @@ private fun NewMiniPlayer(
   val offsetXAnimatable = remember { Animatable(0f) }
   var dragStartTime by remember { mutableLongStateOf(0L) }
   var totalDragDistance by remember { mutableFloatStateOf(0f) }
+  var totalDragDisplacement by remember { mutableFloatStateOf(0f) }
+  var totalPhysicalDragDisplacement by remember { mutableFloatStateOf(0f) }
+  var trackSwipeDirection by remember { mutableStateOf(0) }
+  var trackDirectionGeneration by remember { mutableStateOf(0) }
 
   val animationSpec = remember {
     spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)
@@ -469,6 +492,8 @@ private fun NewMiniPlayer(
                 onDragStart = {
                   dragStartTime = System.currentTimeMillis()
                   totalDragDistance = 0f
+                  totalDragDisplacement = 0f
+                  totalPhysicalDragDisplacement = 0f
                 },
                 onDragCancel = {
                   coroutineScope.launch { offsetXAnimatable.animateTo(0f, animationSpec) }
@@ -478,26 +503,25 @@ private fun NewMiniPlayer(
                     if (layoutDirection == LayoutDirection.Rtl) -dragAmount else dragAmount
                   val canSkipPrevious = playerConnection.player.previousMediaItemIndex != -1
                   val canSkipNext = playerConnection.player.nextMediaItemIndex != -1
-                  val tryingToSwipeRight = adjustedDragAmount > 0
-                  val tryingToSwipeLeft = adjustedDragAmount < 0
-                  val allowLeft = tryingToSwipeLeft && canSkipNext
-                  val allowRight = tryingToSwipeRight && canSkipPrevious
-
-                  val canReturnToCenter =
-                    (tryingToSwipeRight && !canSkipPrevious && offsetXAnimatable.value < 0) ||
-                      (tryingToSwipeLeft && !canSkipNext && offsetXAnimatable.value > 0)
-
-                  if (allowLeft || allowRight || canReturnToCenter) {
-                    totalDragDistance += kotlin.math.abs(adjustedDragAmount)
-                    coroutineScope.launch {
-                      offsetXAnimatable.snapTo(offsetXAnimatable.value + adjustedDragAmount)
-                    }
+                  val canSkipInDirection =
+                    if (adjustedDragAmount > 0) canSkipNext else canSkipPrevious
+                  totalDragDistance += kotlin.math.abs(adjustedDragAmount)
+                  totalDragDisplacement += adjustedDragAmount
+                  totalPhysicalDragDisplacement += dragAmount
+                  val visualDelta =
+                    if (canSkipInDirection) dragAmount else dragAmount * 0.16f
+                  val limit =
+                    if (canSkipInDirection) maxSwipeFollowPx else unavailableSwipeResistancePx
+                  coroutineScope.launch {
+                    offsetXAnimatable.snapTo(
+                      (offsetXAnimatable.value + visualDelta).coerceIn(-limit, limit)
+                    )
                   }
                 },
                 onDragEnd = {
                   val dragDuration = System.currentTimeMillis() - dragStartTime
                   val velocity = if (dragDuration > 0) totalDragDistance / dragDuration else 0f
-                  val currentOffset = offsetXAnimatable.value
+                  val currentOffset = totalDragDisplacement
                   val minDistanceThreshold = 50f
                   val velocityThreshold = (swipeSensitivity * -8.25f) + 8.5f
 
@@ -507,12 +531,30 @@ private fun NewMiniPlayer(
                       (kotlin.math.abs(currentOffset) > autoSwipeThreshold)
 
                   if (shouldChangeSong) {
-                    if (currentOffset > 0 && canSkipPrevious) {
-                      playerConnection.player.seekToPreviousMediaItem()
-                    } else if (currentOffset <= 0 && canSkipNext) {
+                    val canSkipPrevious = playerConnection.player.previousMediaItemIndex != -1
+                    val canSkipNext = playerConnection.player.nextMediaItemIndex != -1
+                    val willSkip =
+                      if (currentOffset > 0) canSkipNext else canSkipPrevious
+                    if (currentOffset > 0 && canSkipNext) {
                       playerConnection.player.seekToNext()
+                    } else if (currentOffset < 0 && canSkipPrevious) {
+                      playerConnection.player.seekToPreviousMediaItem()
+                    }
+                    if (willSkip) {
+                      trackSwipeDirection =
+                        if (totalPhysicalDragDisplacement > 0f) 1 else -1
+                      val generation = ++trackDirectionGeneration
+                      coroutineScope.launch {
+                        delay(MINI_PLAYER_SWIPE_TRANSITION_MS)
+                        if (trackDirectionGeneration == generation) trackSwipeDirection = 0
+                      }
+                      if (hapticsEnabled && clickHapticsEnabled) {
+                        miniPlayerView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                      }
                     }
                   }
+                  totalDragDisplacement = 0f
+                  totalPhysicalDragDisplacement = 0f
                   coroutineScope.launch { offsetXAnimatable.animateTo(0f, animationSpec) }
                 }
               )
@@ -527,7 +569,6 @@ private fun NewMiniPlayer(
             else Modifier.fillMaxWidth()
           )
           .height(MiniPlayerHeight)
-          .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) }
           .let { m ->
             val shape = RoundedCornerShape(percent = 50)
             if (useGlass) {
@@ -548,21 +589,39 @@ private fun NewMiniPlayer(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 8.dp),
       ) {
-        NewMiniPlayerThumbnail(
-          progressState = progressState,
-          mediaMetadata = mediaMetadata,
-          primaryColor = primaryColor,
-          outlineColor = outlineColor,
-        )
+        Box(
+          modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds(),
+        ) {
+          AnimatedContent(
+            targetState = mediaMetadata,
+            transitionSpec = { miniPlayerTrackTransition(trackSwipeDirection) },
+            modifier =
+              Modifier.fillMaxSize()
+                .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) },
+            label = "miniPlayerTrack",
+          ) { trackMetadata ->
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.fillMaxSize(),
+            ) {
+              NewMiniPlayerThumbnail(
+                progressState = progressState,
+                mediaMetadata = trackMetadata,
+                primaryColor = primaryColor,
+                outlineColor = outlineColor,
+              )
 
-        Spacer(modifier = Modifier.width(16.dp))
+              Spacer(modifier = Modifier.width(16.dp))
 
-        NewMiniPlayerSongInfo(
-          mediaMetadata = mediaMetadata,
-          onSurfaceColor = onSurfaceColor,
-          errorColor = errorColor,
-          modifier = Modifier.weight(1f)
-        )
+              NewMiniPlayerSongInfo(
+                mediaMetadata = trackMetadata,
+                onSurfaceColor = onSurfaceColor,
+                errorColor = errorColor,
+                modifier = Modifier.weight(1f),
+              )
+            }
+          }
+        }
 
         Spacer(modifier = Modifier.width(4.dp))
 
@@ -599,6 +658,16 @@ private fun NewMiniPlayer(
             onPrimaryColor = onPrimaryColor
           )
         }
+      }
+      if (offsetXAnimatable.value.absoluteValue > 1f) {
+        MiniPlayerSwipeChevron(
+          direction = if (offsetXAnimatable.value > 0f) 1 else -1,
+          alpha = (offsetXAnimatable.value.absoluteValue / maxSwipeFollowPx).coerceIn(0.18f, 0.9f),
+          color = primaryColor,
+          modifier =
+            Modifier.align(if (offsetXAnimatable.value > 0f) Alignment.CenterEnd else Alignment.CenterStart)
+              .padding(horizontal = 10.dp),
+        )
       }
     }
   }
@@ -778,6 +847,8 @@ private fun LegacyMiniPlayer(
 
   val swipeSensitivity by rememberPreference(SwipeSensitivityKey, 0.73f)
   val swipeThumbnailPref by rememberPreference(SwipeThumbnailKey, true)
+  val hapticsEnabled by rememberPreference(EnableHapticsKey, false)
+  val clickHapticsEnabled by rememberPreference(EnableClickHapticsKey, true)
 
   val listenTogetherManager = LocalListenTogetherManager.current
   val isListenTogetherGuest = listenTogetherManager?.let { it.isGuestPlaybackRestricted } ?: false
@@ -787,6 +858,9 @@ private fun LegacyMiniPlayer(
 
   val layoutDirection = LocalLayoutDirection.current
   val coroutineScope = rememberCoroutineScope()
+  val miniPlayerView = LocalView.current
+  val maxSwipeFollowPx = with(LocalDensity.current) { 10.dp.toPx() }
+  val unavailableSwipeResistancePx = with(LocalDensity.current) { 3.dp.toPx() }
 
   val configuration = LocalConfiguration.current
   val isTabletLandscape =
@@ -798,6 +872,10 @@ private fun LegacyMiniPlayer(
   val offsetXAnimatable = remember { Animatable(0f) }
   var dragStartTime by remember { mutableLongStateOf(0L) }
   var totalDragDistance by remember { mutableFloatStateOf(0f) }
+  var totalDragDisplacement by remember { mutableFloatStateOf(0f) }
+  var totalPhysicalDragDisplacement by remember { mutableFloatStateOf(0f) }
+  var trackSwipeDirection by remember { mutableStateOf(0) }
+  var trackDirectionGeneration by remember { mutableStateOf(0) }
 
   val animationSpec = remember {
     spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)
@@ -869,6 +947,8 @@ private fun LegacyMiniPlayer(
                 onDragStart = {
                   dragStartTime = System.currentTimeMillis()
                   totalDragDistance = 0f
+                  totalDragDisplacement = 0f
+                  totalPhysicalDragDisplacement = 0f
                 },
                 onDragCancel = {
                   coroutineScope.launch { offsetXAnimatable.animateTo(0f, animationSpec) }
@@ -878,26 +958,25 @@ private fun LegacyMiniPlayer(
                     if (layoutDirection == LayoutDirection.Rtl) -dragAmount else dragAmount
                   val canSkipPrevious = playerConnection.player.previousMediaItemIndex != -1
                   val canSkipNext = playerConnection.player.nextMediaItemIndex != -1
-                  val tryingToSwipeRight = adjustedDragAmount > 0
-                  val tryingToSwipeLeft = adjustedDragAmount < 0
-                  val allowLeft = tryingToSwipeLeft && canSkipNext
-                  val allowRight = tryingToSwipeRight && canSkipPrevious
-
-                  val canReturnToCenter =
-                    (tryingToSwipeRight && !canSkipPrevious && offsetXAnimatable.value < 0) ||
-                      (tryingToSwipeLeft && !canSkipNext && offsetXAnimatable.value > 0)
-
-                  if (allowLeft || allowRight || canReturnToCenter) {
-                    totalDragDistance += kotlin.math.abs(adjustedDragAmount)
-                    coroutineScope.launch {
-                      offsetXAnimatable.snapTo(offsetXAnimatable.value + adjustedDragAmount)
-                    }
+                  val canSkipInDirection =
+                    if (adjustedDragAmount > 0) canSkipNext else canSkipPrevious
+                  totalDragDistance += kotlin.math.abs(adjustedDragAmount)
+                  totalDragDisplacement += adjustedDragAmount
+                  totalPhysicalDragDisplacement += dragAmount
+                  val visualDelta =
+                    if (canSkipInDirection) dragAmount else dragAmount * 0.16f
+                  val limit =
+                    if (canSkipInDirection) maxSwipeFollowPx else unavailableSwipeResistancePx
+                  coroutineScope.launch {
+                    offsetXAnimatable.snapTo(
+                      (offsetXAnimatable.value + visualDelta).coerceIn(-limit, limit)
+                    )
                   }
                 },
                 onDragEnd = {
                   val dragDuration = System.currentTimeMillis() - dragStartTime
                   val velocity = if (dragDuration > 0) totalDragDistance / dragDuration else 0f
-                  val currentOffset = offsetXAnimatable.value
+                  val currentOffset = totalDragDisplacement
                   val minDistanceThreshold = 50f
                   val velocityThreshold = (swipeSensitivity * -8.25f) + 8.5f
 
@@ -907,12 +986,30 @@ private fun LegacyMiniPlayer(
                       (kotlin.math.abs(currentOffset) > autoSwipeThreshold)
 
                   if (shouldChangeSong) {
-                    if (currentOffset > 0 && canSkipPrevious) {
-                      playerConnection.player.seekToPreviousMediaItem()
-                    } else if (currentOffset <= 0 && canSkipNext) {
+                    val canSkipPrevious = playerConnection.player.previousMediaItemIndex != -1
+                    val canSkipNext = playerConnection.player.nextMediaItemIndex != -1
+                    val willSkip =
+                      if (currentOffset > 0) canSkipNext else canSkipPrevious
+                    if (currentOffset > 0 && canSkipNext) {
                       playerConnection.player.seekToNext()
+                    } else if (currentOffset < 0 && canSkipPrevious) {
+                      playerConnection.player.seekToPreviousMediaItem()
+                    }
+                    if (willSkip) {
+                      trackSwipeDirection =
+                        if (totalPhysicalDragDisplacement > 0f) 1 else -1
+                      val generation = ++trackDirectionGeneration
+                      coroutineScope.launch {
+                        delay(MINI_PLAYER_SWIPE_TRANSITION_MS)
+                        if (trackDirectionGeneration == generation) trackSwipeDirection = 0
+                      }
+                      if (hapticsEnabled && clickHapticsEnabled) {
+                        miniPlayerView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                      }
                     }
                   }
+                  totalDragDisplacement = 0f
+                  totalPhysicalDragDisplacement = 0f
                   coroutineScope.launch { offsetXAnimatable.animateTo(0f, animationSpec) }
                 }
               )
@@ -922,7 +1019,9 @@ private fun LegacyMiniPlayer(
   ) {
     Box(
       modifier =
-        Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter).drawWithContent {
+        Modifier.fillMaxWidth().height(2.dp).align(Alignment.BottomCenter)
+          .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) }
+          .drawWithContent {
           val progress = progressState.progress
           drawRect(trackColor)
           drawRect(primaryColor, size = Size(size.width * progress, size.height))
@@ -933,16 +1032,24 @@ private fun LegacyMiniPlayer(
       verticalAlignment = Alignment.CenterVertically,
       modifier =
         Modifier.fillMaxSize()
-          .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) }
           .padding(end = 12.dp),
     ) {
-      Box(Modifier.weight(1f)) {
-        mediaMetadata?.let {
-          LegacyMiniMediaInfo(
-            mediaMetadata = it,
-            pureBlack = pureBlack,
-            modifier = Modifier.padding(horizontal = 6.dp),
-          )
+      Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+        AnimatedContent(
+          targetState = mediaMetadata,
+          transitionSpec = { miniPlayerTrackTransition(trackSwipeDirection) },
+          modifier =
+            Modifier.fillMaxSize()
+              .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) },
+          label = "legacyMiniPlayerTrack",
+        ) { trackMetadata ->
+          trackMetadata?.let {
+            LegacyMiniMediaInfo(
+              mediaMetadata = it,
+              pureBlack = pureBlack,
+              modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
+            )
+          }
         }
       }
 
@@ -964,27 +1071,15 @@ private fun LegacyMiniPlayer(
       }
     }
 
-    if (offsetXAnimatable.value.absoluteValue > 50f) {
-      Box(
+    if (offsetXAnimatable.value.absoluteValue > 1f) {
+      MiniPlayerSwipeChevron(
+        direction = if (offsetXAnimatable.value > 0f) 1 else -1,
+        alpha = (offsetXAnimatable.value.absoluteValue / maxSwipeFollowPx).coerceIn(0.18f, 0.9f),
+        color = primaryColor,
         modifier =
-          Modifier.align(
-              if (offsetXAnimatable.value > 0) Alignment.CenterStart else Alignment.CenterEnd
-            )
-            .padding(horizontal = 16.dp)
-      ) {
-        Icon(
-          painter =
-            painterResource(
-              if (offsetXAnimatable.value > 0) R.drawable.skip_previous else R.drawable.skip_next
-            ),
-          contentDescription = null,
-          tint =
-            primaryColor.copy(
-              alpha = (offsetXAnimatable.value.absoluteValue / autoSwipeThreshold).coerceIn(0f, 1f)
-            ),
-          modifier = Modifier.size(24.dp)
-        )
-      }
+          Modifier.align(if (offsetXAnimatable.value > 0f) Alignment.CenterEnd else Alignment.CenterStart)
+            .padding(horizontal = 10.dp),
+      )
     }
   }
 }
@@ -1052,6 +1147,72 @@ private fun performMiniPlayerPlayPause(
     playerConnection.togglePlayPause()
   }
 }
+
+@Composable
+internal fun MiniPlayerSwipeChevron(
+  direction: Int,
+  alpha: Float,
+  color: Color = Color.White,
+  modifier: Modifier = Modifier,
+) {
+  if (direction == 0) return
+  Canvas(modifier.size(14.dp)) {
+    val hintColor = color.copy(alpha = alpha)
+    val centerY = size.height / 2f
+    val innerX = if (direction > 0) size.width * 0.35f else size.width * 0.65f
+    val outerX = if (direction > 0) size.width * 0.68f else size.width * 0.32f
+    val strokeWidth = 2.dp.toPx()
+    drawLine(
+      hintColor,
+      Offset(innerX, centerY - size.height * 0.28f),
+      Offset(outerX, centerY),
+      strokeWidth,
+      StrokeCap.Round,
+    )
+    drawLine(
+      hintColor,
+      Offset(outerX, centerY),
+      Offset(innerX, centerY + size.height * 0.28f),
+      strokeWidth,
+      StrokeCap.Round,
+    )
+  }
+}
+
+internal data class MiniPlayerTrackVisual(
+  val id: String?,
+  val title: String,
+  val artist: String,
+  val artwork: String?,
+)
+
+internal const val MINI_PLAYER_SWIPE_TRANSITION_MS = 600L
+
+internal fun miniPlayerTrackTransition(direction: Int): ContentTransform =
+  if (direction == 0) {
+    fadeIn(tween(120)) togetherWith fadeOut(tween(120))
+  } else {
+    (
+      slideInHorizontally(
+        initialOffsetX = { if (direction > 0) -it else it },
+        animationSpec =
+          spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow,
+          ),
+      ) + fadeIn(tween(120))
+    ) togetherWith
+      (
+        slideOutHorizontally(
+          targetOffsetX = { if (direction > 0) it else -it },
+          animationSpec =
+            spring(
+              dampingRatio = Spring.DampingRatioNoBouncy,
+              stiffness = Spring.StiffnessLow,
+            ),
+        ) + fadeOut(tween(120))
+      )
+  }
 
 @Composable
 private fun LegacyMiniMediaInfo(

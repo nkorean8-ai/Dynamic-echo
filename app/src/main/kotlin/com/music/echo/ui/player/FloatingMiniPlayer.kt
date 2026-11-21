@@ -1,6 +1,8 @@
 /** vivimusic Project (C) 2026 Licensed under GPL-3.0 | See git history for contributors */
 package echo.music.iad1tya.ui.player
 
+import android.view.HapticFeedbackConstants
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -17,6 +19,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,6 +49,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -58,10 +65,14 @@ import echo.music.iad1tya.constants.SwipeSensitivityKey
 import echo.music.iad1tya.constants.SwipeThumbnailKey
 import echo.music.iad1tya.constants.MiniPlayerControlsMode
 import echo.music.iad1tya.constants.MiniPlayerControlsModeKey
+import echo.music.iad1tya.constants.EnableClickHapticsKey
+import echo.music.iad1tya.constants.EnableHapticsKey
 import echo.music.iad1tya.extensions.togglePlayPause
 import echo.music.iad1tya.utils.rememberEnumPreference
 import echo.music.iad1tya.utils.rememberPreference
+import kotlinx.coroutines.delay
 import kotlin.math.abs
+import kotlin.math.absoluteValue
 import kotlin.math.exp
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -87,6 +98,8 @@ fun FloatingMiniPlayer(
 
   val swipeSensitivity by rememberPreference(SwipeSensitivityKey, 0.73f)
   val swipeThumbnailPref by rememberPreference(SwipeThumbnailKey, true)
+  val hapticsEnabled by rememberPreference(EnableHapticsKey, false)
+  val clickHapticsEnabled by rememberPreference(EnableClickHapticsKey, true)
   val controlsMode by
     rememberEnumPreference(MiniPlayerControlsModeKey, MiniPlayerControlsMode.BUTTONS)
   val listenTogetherManager = LocalListenTogetherManager.current
@@ -97,10 +110,15 @@ fun FloatingMiniPlayer(
 
   val layoutDirection = LocalLayoutDirection.current
   val coroutineScope = rememberCoroutineScope()
+  val miniPlayerView = LocalView.current
+  val maxSwipeFollowPx = with(LocalDensity.current) { 10.dp.toPx() }
+  val unavailableSwipeResistancePx = with(LocalDensity.current) { 3.dp.toPx() }
 
   val offsetXAnimatable = remember { Animatable(0f) }
   var dragStartTime by remember { mutableLongStateOf(0L) }
   var totalDragDistance by remember { mutableFloatStateOf(0f) }
+  var totalDragDisplacement by remember { mutableFloatStateOf(0f) }
+  var totalPhysicalDragDisplacement by remember { mutableFloatStateOf(0f) }
   val animationSpec = remember {
     spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)
   }
@@ -130,6 +148,15 @@ fun FloatingMiniPlayer(
     mediaMetadata?.thumbnailUrl?.takeIf { it.isNotBlank() }
       ?: currentItem?.mediaMetadata?.artworkUri?.toString()
       ?: currentItem?.mediaMetadata?.extras?.getString("artwork_uri")
+  val trackVisual =
+    MiniPlayerTrackVisual(
+      id = currentItem?.mediaId,
+      title = resolvedTitle,
+      artist = resolvedArtist,
+      artwork = resolvedArtwork,
+    )
+  var trackSwipeDirection by remember { mutableStateOf(0) }
+  var trackDirectionGeneration by remember { mutableStateOf(0) }
 
   val effectiveContentColor =
     if (contentColor.isSpecified && contentColor != Color.Transparent) {
@@ -167,6 +194,8 @@ fun FloatingMiniPlayer(
                 onDragStart = {
                   dragStartTime = System.currentTimeMillis()
                   totalDragDistance = 0f
+                  totalDragDisplacement = 0f
+                  totalPhysicalDragDisplacement = 0f
                 },
                 onDragCancel = {
                   coroutineScope.launch { offsetXAnimatable.animateTo(0f, animationSpec) }
@@ -176,26 +205,25 @@ fun FloatingMiniPlayer(
                     if (layoutDirection == LayoutDirection.Rtl) -dragAmount else dragAmount
                   val canSkipPrevious = playerConnection.player.previousMediaItemIndex != -1
                   val canSkipNext = playerConnection.player.nextMediaItemIndex != -1
-                  val tryingToSwipeRight = adjustedDragAmount > 0
-                  val tryingToSwipeLeft = adjustedDragAmount < 0
-                  val allowLeft = tryingToSwipeLeft && canSkipNext
-                  val allowRight = tryingToSwipeRight && canSkipPrevious
-
-                  val canReturnToCenter =
-                    (tryingToSwipeRight && !canSkipPrevious && offsetXAnimatable.value < 0) ||
-                      (tryingToSwipeLeft && !canSkipNext && offsetXAnimatable.value > 0)
-
-                  if (allowLeft || allowRight || canReturnToCenter) {
-                    totalDragDistance += abs(adjustedDragAmount)
-                    coroutineScope.launch {
-                      offsetXAnimatable.snapTo(offsetXAnimatable.value + adjustedDragAmount)
-                    }
+                  val canSkipInDirection =
+                    if (adjustedDragAmount > 0) canSkipNext else canSkipPrevious
+                  totalDragDistance += abs(adjustedDragAmount)
+                  totalDragDisplacement += adjustedDragAmount
+                  totalPhysicalDragDisplacement += dragAmount
+                  val visualDelta =
+                    if (canSkipInDirection) dragAmount else dragAmount * 0.16f
+                  val limit =
+                    if (canSkipInDirection) maxSwipeFollowPx else unavailableSwipeResistancePx
+                  coroutineScope.launch {
+                    offsetXAnimatable.snapTo(
+                      (offsetXAnimatable.value + visualDelta).coerceIn(-limit, limit)
+                    )
                   }
                 },
                 onDragEnd = {
                   val dragDuration = System.currentTimeMillis() - dragStartTime
                   val velocity = if (dragDuration > 0) totalDragDistance / dragDuration else 0f
-                  val currentOffset = offsetXAnimatable.value
+                  val currentOffset = totalDragDisplacement
                   val minDistanceThreshold = 50f
                   val velocityThreshold = (swipeSensitivity * -8.25f) + 8.5f
                   val canSkipPrevious = playerConnection.player.previousMediaItemIndex != -1
@@ -206,12 +234,28 @@ fun FloatingMiniPlayer(
                       (abs(currentOffset) > autoSwipeThreshold)
 
                   if (shouldChangeSong) {
-                    if (currentOffset > 0 && canSkipPrevious) {
-                      playerConnection.player.seekToPreviousMediaItem()
-                    } else if (currentOffset <= 0 && canSkipNext) {
+                    val willSkip =
+                      if (currentOffset > 0) canSkipNext else canSkipPrevious
+                    if (currentOffset > 0 && canSkipNext) {
                       playerConnection.player.seekToNext()
+                    } else if (currentOffset < 0 && canSkipPrevious) {
+                      playerConnection.player.seekToPreviousMediaItem()
+                    }
+                    if (willSkip) {
+                      trackSwipeDirection =
+                        if (totalPhysicalDragDisplacement > 0f) 1 else -1
+                      val generation = ++trackDirectionGeneration
+                      coroutineScope.launch {
+                        delay(MINI_PLAYER_SWIPE_TRANSITION_MS)
+                        if (trackDirectionGeneration == generation) trackSwipeDirection = 0
+                      }
+                      if (hapticsEnabled && clickHapticsEnabled) {
+                        miniPlayerView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                      }
                     }
                   }
+                  totalDragDisplacement = 0f
+                  totalPhysicalDragDisplacement = 0f
                   coroutineScope.launch { offsetXAnimatable.animateTo(0f, animationSpec) }
                 },
               )
@@ -225,7 +269,6 @@ fun FloatingMiniPlayer(
       verticalAlignment = Alignment.CenterVertically,
       modifier =
         Modifier.fillMaxWidth()
-          .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) }
           .then(
             if (gesturesMode) {
               Modifier.combinedClickable(
@@ -257,50 +300,66 @@ fun FloatingMiniPlayer(
             vertical = if (isInline) 4.dp else 8.dp,
           ),
     ) {
-      AsyncImage(
-        model = resolvedArtwork,
-        placeholder = painterResource(R.drawable.music_note),
-        error = painterResource(R.drawable.music_note),
-        fallback = painterResource(R.drawable.music_note),
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier =
-          Modifier.size(artSize)
-            .clip(RoundedCornerShape(artCornerRadius))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-      )
-
-      Spacer(Modifier.width(if (isInline) 8.dp else 12.dp))
-
-      if (isInline) {
-        Text(
-          text = resolvedTitle,
-          style = MaterialTheme.typography.bodySmall,
-          color = effectiveContentColor,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.weight(1f),
-        )
-      } else {
-        Column(
-          modifier = Modifier.weight(1f),
-          verticalArrangement = Arrangement.Center,
-        ) {
-          Text(
-            text = resolvedTitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = effectiveContentColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-          if (resolvedArtist.isNotBlank()) {
-            Text(
-              text = resolvedArtist,
-              style = MaterialTheme.typography.bodySmall,
-              color = effectiveContentColor.copy(alpha = 0.7f),
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
+      Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+        AnimatedContent(
+          targetState = trackVisual,
+          transitionSpec = { miniPlayerTrackTransition(trackSwipeDirection) },
+          modifier =
+            Modifier.fillMaxSize()
+              .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) },
+          label = "floatingMiniPlayerTrack",
+        ) { track ->
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxSize(),
+          ) {
+            AsyncImage(
+              model = track.artwork,
+              placeholder = painterResource(R.drawable.music_note),
+              error = painterResource(R.drawable.music_note),
+              fallback = painterResource(R.drawable.music_note),
+              contentDescription = null,
+              contentScale = ContentScale.Crop,
+              modifier =
+                Modifier.size(artSize)
+                  .clip(RoundedCornerShape(artCornerRadius))
+                  .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
             )
+
+            Spacer(Modifier.width(if (isInline) 8.dp else 12.dp))
+
+            if (isInline) {
+              Text(
+                text = track.title,
+                style = MaterialTheme.typography.bodySmall,
+                color = effectiveContentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+              )
+            } else {
+              Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center,
+              ) {
+                Text(
+                  text = track.title,
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = effectiveContentColor,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                )
+                if (track.artist.isNotBlank()) {
+                  Text(
+                    text = track.artist,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = effectiveContentColor.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                }
+              }
+            }
           }
         }
       }
@@ -330,6 +389,16 @@ fun FloatingMiniPlayer(
           )
         }
       }
+    }
+    if (offsetXAnimatable.value.absoluteValue > 1f) {
+      MiniPlayerSwipeChevron(
+        direction = if (offsetXAnimatable.value > 0f) 1 else -1,
+        alpha = (offsetXAnimatable.value.absoluteValue / maxSwipeFollowPx).coerceIn(0.18f, 0.9f),
+        color = effectiveContentColor,
+        modifier =
+          Modifier.align(if (offsetXAnimatable.value > 0f) Alignment.CenterEnd else Alignment.CenterStart)
+            .padding(horizontal = 8.dp),
+      )
     }
   }
 }
