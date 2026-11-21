@@ -33,7 +33,8 @@
     "Dynamic Island: fall back to the existing MediaSession activity PendingIntent when triple-tap app launch is rejected by background-start restrictions",
     "Dynamic Island: stabilize cutout anchoring with calibrated path bounds and preserve the baseline shown in the Appearance preview",
     "Dynamic Island: route root touch events directly to the gesture state machine while preserving Compose seek-slider input",
-    "Dynamic Island: debounce transient unavailable playback snapshots to prevent whole-pill flashing"
+    "Dynamic Island: debounce transient unavailable playback snapshots to prevent whole-pill flashing",
+    "Dynamic Island: stop duplicate overlay service instances and remove repeated redraws to prevent overlapping or flashing windows"
   ],
   "contributors": []
 }

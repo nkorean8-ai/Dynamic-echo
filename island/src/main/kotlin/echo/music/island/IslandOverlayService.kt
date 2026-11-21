@@ -190,6 +190,7 @@ class IslandOverlayService : Service() {
   private var screenReceiverRegistered = false
   private var lastInactivitySeconds: Int? = null
   private var lastLayoutSettings: IslandSettings? = null
+  private var isPrimaryInstance = false
 
   private val screenReceiver =
     object : BroadcastReceiver() {
@@ -205,10 +206,17 @@ class IslandOverlayService : Service() {
     }
   override fun onCreate() {
     super.onCreate()
+    if (activeInstance != null && activeInstance !== this) {
+      Log.w(TAG, "Another island overlay service instance is already active; stopping duplicate")
+      stopSelf()
+      return
+    }
     if (!controller.hasOverlayPermission()) {
       stopSelf()
       return
     }
+    activeInstance = this
+    isPrimaryInstance = true
     windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
     createNotificationChannel()
     startForeground(NOTIFICATION_ID, buildNotification())
@@ -262,6 +270,10 @@ class IslandOverlayService : Service() {
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    if (!isPrimaryInstance) {
+      stopSelf()
+      return START_NOT_STICKY
+    }
     render()
     return START_NOT_STICKY
   }
@@ -324,8 +336,7 @@ class IslandOverlayService : Service() {
     if (overlayView == null) return
     visibilityJob?.cancel()
     visibilityJob = null
-    islandVisible = true
-    overlayView?.invalidate()
+    if (!islandVisible) islandVisible = true
     if (wasNewTrack) {
       if (settings.showTrackChange) beginExpand(trackChange = true)
       else if (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) collapseImmediately()
@@ -1091,6 +1102,7 @@ class IslandOverlayService : Service() {
   }
 
   override fun onDestroy() {
+    if (activeInstance === this) activeInstance = null
     processObserver?.let { ProcessLifecycleOwner.get().lifecycle.removeObserver(it) }
     if (screenReceiverRegistered) {
       unregisterReceiver(screenReceiver)
@@ -1214,6 +1226,7 @@ class IslandOverlayService : Service() {
 
   private companion object {
     const val TAG = ISLAND_LOG_TAG
+    @Volatile var activeInstance: IslandOverlayService? = null
     const val CHANNEL_ID = "echo_island"
     const val NOTIFICATION_ID = 1948
     const val TRACK_EXPANSION_MS = 3500L

@@ -376,7 +376,8 @@ The optional Dynamic Island equivalent lives in the `:island` module. `IslandCon
 is the single state bridge from `MusicService` to the overlay service; it never owns a
 player. The service uses a ComposeView with explicit lifecycle, saved-state, and
 ViewModel-store owners, disposes composition on window detachment, tracks pending
-WindowManager attachment separately from view attachment, positions itself from
+WindowManager attachment separately from view attachment. Only one overlay service instance
+may own a window; duplicate starts are stopped immediately.
 status-bar/display-cutout insets, and hides while the app process is foregrounded when that
 Appearance option is enabled.
 Overlay permission denial stops the service and leaves normal media playback/notification
