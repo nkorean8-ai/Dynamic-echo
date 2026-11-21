@@ -25,7 +25,10 @@
     "Playlists: allow removing duplicate songs from a playlist directly from the 'Add to playlist' dialog and fix premature dialog dismissal (#655, #675)",
     "Settings: remove stale search results for lyrics options that no longer exist (provider toggles, per-language romanization, glow effect), so searching settings no longer points to missing options (#700)",
     "Dynamic Island: prevent Android 17 attach-time ComposeView lifecycle crashes by disposing composition on detach and removing WindowManager-registered views before destroying their lifecycle owner",
-    "Dynamic Island: prevent single-swatch artwork palette crashes in optional gradients and forward compact overlay touches through normal Compose dispatch"
+    "Dynamic Island: prevent artwork-palette crashes by using a solid fallback unless at least two distinct swatches are available",
+    "Dynamic Island: capture compact-pill gestures at the overlay root while forwarding expanded-panel touches to Compose",
+    "Dynamic Island: hide promptly when playback stops or ends, and auto-hide intentional pauses after 60 seconds by default",
+    "Dynamic Island: fall back to the existing MediaSession activity PendingIntent when triple-tap app launch is rejected by background-start restrictions"
   ],
   "contributors": []
 }

@@ -21,15 +21,16 @@ data class IslandPlaybackState(
   val positionMs: Long,
   val durationMs: Long,
   val isPlaying: Boolean,
+  val isPaused: Boolean = !isPlaying,
 )
 
 data class IslandSettings(
   val enabled: Boolean = false,
   val singleTapExpand: Boolean = true,
-  val autoHideSeconds: Int = 30,
+  val autoHideSeconds: Int = 60,
   val inactivitySeconds: Int = 5,
   val showTrackChange: Boolean = true,
-  val verticalOffsetDp: Int = 0,
+  val verticalOffsetDp: Int = -22,
   val backgroundStyle: String = "DEFAULT",
   val followMiniPlayerStyle: Boolean = false,
   val miniPlayerBackgroundStyle: String = "DEFAULT",
@@ -52,6 +53,7 @@ class IslandController @Inject constructor(
   @Volatile private var onPrevious: (() -> Unit)? = null
   @Volatile private var onNext: (() -> Unit)? = null
   @Volatile private var onSeek: ((Long) -> Unit)? = null
+  @Volatile private var onSessionActivityFallback: (() -> Unit)? = null
 
   fun updatePlayback(state: IslandPlaybackState?) {
     _playback.value = state
@@ -80,10 +82,15 @@ class IslandController @Inject constructor(
   fun next() = onNext?.invoke()
   fun seek(positionMs: Long) = onSeek?.invoke(positionMs)
 
+  fun setSessionActivityFallback(action: (() -> Unit)?) {
+    onSessionActivityFallback = action
+  }
+
   fun openApp() {
     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
     if (launchIntent == null) {
       Timber.tag(TAG).w("Unable to resolve app launch intent for island")
+      launchSessionActivityFallback()
       return
     }
     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -91,8 +98,23 @@ class IslandController @Inject constructor(
       ContextCompat.startActivity(context, launchIntent, null)
     } catch (error: ActivityNotFoundException) {
       Timber.tag(TAG).e(error, "Unable to open Echo from the island gesture")
+      launchSessionActivityFallback()
     } catch (error: SecurityException) {
       Timber.tag(TAG).e(error, "Background activity launch was blocked for the island gesture")
+      launchSessionActivityFallback()
+    }
+  }
+
+  private fun launchSessionActivityFallback() {
+    val fallback = onSessionActivityFallback
+    if (fallback == null) {
+      Timber.tag(TAG).w("Media session activity fallback is unavailable for the island")
+      return
+    }
+    try {
+      fallback()
+    } catch (error: SecurityException) {
+      Timber.tag(TAG).e(error, "Media session activity fallback was blocked")
     }
   }
 

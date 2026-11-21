@@ -396,9 +396,18 @@ suppresses timeout while dragging and restarts it on drag end. The overlay uses
 spring morph to finish before restoring compact window dimensions. `LIQUID_GLASS` in this
 service uses a dark, artwork-tinted surface because the service Compose tree has no app
 backdrop to sample.
-The root touch listener handles `ACTION_OUTSIDE` but forwards normal inside-window events
-to Compose after observing compact-pill gestures. Palette-derived gradients must have at
-least two colors even when artwork extraction returns a single swatch.
+The root touch listener handles `ACTION_OUTSIDE`, captures the compact-pill gesture stream,
+and forwards expanded-panel inside-window events to Compose. Artwork-derived gradients may
+only be drawn with at least two distinct colors; otherwise retain the solid near-black
+fallback. Fresh installs use a 60-second paused-playback auto-hide and a -22dp cutout offset;
+existing DataStore values must remain unchanged.
+Compact tap recognition uses one 300 ms tap-count window: single-tap expansion therefore
+waits briefly to distinguish double/triple taps. Right/left swipes map to next/previous.
+Triple-tap launch first uses the explicit launch intent under the user-granted overlay
+permission and falls back to MusicService's existing session-activity PendingIntent with
+background-activity-launch options if direct launch is rejected. There is no island invert-
+swipe preference in the current preference schema; do not reinterpret mini-player swipe
+preferences as island settings.
 
 ## Library UI Separation
 

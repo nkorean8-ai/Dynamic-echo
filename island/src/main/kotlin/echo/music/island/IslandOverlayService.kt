@@ -154,7 +154,9 @@ class IslandOverlayService : Service() {
   private var compactGestureActive = false
   private var compactGestureMoved = false
   private var compactGestureHandled = false
+  private var compactGestureMoveLogged = false
   private var pausedAutoHideSeconds: Int? = null
+  private var pausedAutoHidePlaybackKey: String? = null
   private var phase by mutableStateOf(IslandPhase.COLLAPSED)
   private var autoHiddenPlaybackKey: String? = null
   private var appInForeground = false
@@ -273,8 +275,10 @@ class IslandOverlayService : Service() {
     }
     if (state.isPlaying) {
       stopPausedAutoHide()
+    } else if (state.isPaused) {
+      startPausedAutoHide(settings.autoHideSeconds, playbackKey)
     } else {
-      startPausedAutoHide(settings.autoHideSeconds)
+      stopPausedAutoHide()
     }
     val wasNewTrack = state.trackId != lastTrackId
     if (wasNewTrack) lastTrackId = state.trackId
@@ -329,7 +333,7 @@ class IslandOverlayService : Service() {
             true
           } else if (phase == IslandPhase.COLLAPSED || compactGestureActive) {
             handleCompactGesture(event)
-            false
+            true
           } else {
             false
           }
@@ -708,10 +712,15 @@ class IslandOverlayService : Service() {
         compactGestureActive = true
         compactGestureMoved = false
         compactGestureHandled = false
+        compactGestureMoveLogged = false
       }
 
       MotionEvent.ACTION_MOVE -> {
         if (!compactGestureActive) return
+        if (!compactGestureMoveLogged) {
+          Log.d(TAG, "Compact touch MOVE: (${event.x},${event.y}), pointers=${event.pointerCount}")
+          compactGestureMoveLogged = true
+        }
         val pointerIndex = event.findPointerIndex(compactGesturePointerId)
         if (pointerIndex < 0) {
           cancelCompactTapSequence()
@@ -767,6 +776,7 @@ class IslandOverlayService : Service() {
       MotionEvent.ACTION_POINTER_DOWN,
       MotionEvent.ACTION_POINTER_UP,
       MotionEvent.ACTION_CANCEL -> {
+        Log.d(TAG, "Compact touch cancelled: action=${MotionEvent.actionToString(event.action)}")
         cancelCompactTapSequence()
         resetCompactGesture()
       }
@@ -838,12 +848,14 @@ class IslandOverlayService : Service() {
     compactGestureActive = false
     compactGestureMoved = false
     compactGestureHandled = false
+    compactGestureMoveLogged = false
   }
 
   private fun distance(x: Float, y: Float): Float =
     kotlin.math.sqrt(x * x + y * y)
 
   private fun startSeekDrag() {
+    Log.d(TAG, "Expanded seek drag started")
     isSeekDragging = true
     cancelInactivityTimer()
   }
@@ -855,26 +867,42 @@ class IslandOverlayService : Service() {
   }
 
   private fun endSeekDrag() {
+    Log.d(TAG, "Expanded seek drag ended")
     isSeekDragging = false
     resetInactivityTimer()
   }
 
-  private fun startPausedAutoHide(seconds: Int) {
+  private fun startPausedAutoHide(seconds: Int, playbackKey: String) {
     if (seconds <= 0) {
       stopPausedAutoHide()
       return
     }
-    if (hideJob?.isActive == true && pausedAutoHideSeconds == seconds) return
+    if (
+      hideJob?.isActive == true &&
+        pausedAutoHideSeconds == seconds &&
+        pausedAutoHidePlaybackKey == playbackKey
+    ) {
+      return
+    }
     stopPausedAutoHide()
     pausedAutoHideSeconds = seconds
+    pausedAutoHidePlaybackKey = playbackKey
     hideJob =
       serviceScope.launch {
         delay(seconds * 1000L)
-        val state = controller.playback.value
-        if (state != null && !state.isPlaying) {
-          autoHiddenPlaybackKey = state.visibilityKey()
+        val currentState = controller.playback.value
+        if (
+          currentState != null &&
+            currentState.isPaused &&
+            currentState.visibilityKey() == playbackKey
+        ) {
+          autoHiddenPlaybackKey = playbackKey
+          removeOverlay()
         }
-        removeOverlay()
+      }.also { job ->
+        job.invokeOnCompletion {
+          if (hideJob === job) hideJob = null
+        }
       }
   }
 
@@ -882,6 +910,7 @@ class IslandOverlayService : Service() {
     hideJob?.cancel()
     hideJob = null
     pausedAutoHideSeconds = null
+    pausedAutoHidePlaybackKey = null
   }
 
   private fun registerScreenReceiver() {
@@ -1085,11 +1114,13 @@ private fun IslandContent(
           .pointerInput(isExpanded) {
             if (!isExpanded) return@pointerInput
             awaitEachGesture {
-              awaitFirstDown(pass = PointerEventPass.Initial)
+              val down = awaitFirstDown(pass = PointerEventPass.Initial)
+              Log.d(ISLAND_LOG_TAG, "Expanded panel Compose DOWN: ${down.position}")
               onUserInteraction()
               do {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
               } while (event.changes.any { it.pressed })
+              Log.d(ISLAND_LOG_TAG, "Expanded panel Compose UP")
             }
           }
           .pointerInput(isExpanded) {
@@ -1102,6 +1133,7 @@ private fun IslandContent(
                 dragStartedOnSlider = isSeekDragging()
                 totalDragX = 0f
                 totalDragY = 0f
+                Log.d(ISLAND_LOG_TAG, "Expanded panel drag start: onSlider=$dragStartedOnSlider")
               },
               onDrag = { _, amount ->
                 totalDragX += amount.x
@@ -1110,6 +1142,7 @@ private fun IslandContent(
                   totalDragY < -swipeCollapseThresholdPx &&
                   kotlin.math.abs(totalDragY) > kotlin.math.abs(totalDragX) * 1.15f
                 ) {
+                  Log.d(ISLAND_LOG_TAG, "Expanded panel upward swipe -> collapse")
                   onCollapse()
                 }
               },
@@ -1201,6 +1234,7 @@ private fun ExpandedIsland(
         contentScale = ContentScale.Crop,
         modifier =
           Modifier.size(42.dp).clickable {
+            Log.d(ISLAND_LOG_TAG, "Expanded artwork tapped")
             onUserInteraction()
           },
       )
@@ -1213,6 +1247,7 @@ private fun ExpandedIsland(
         color = Color.White,
         modifier =
           Modifier.clickable {
+            Log.d(ISLAND_LOG_TAG, "Expanded previous tapped")
             onUserInteraction()
             onPrevious()
           }.padding(8.dp),
@@ -1222,6 +1257,7 @@ private fun ExpandedIsland(
         color = Color.White,
         modifier =
           Modifier.clickable {
+            Log.d(ISLAND_LOG_TAG, "Expanded play/pause tapped")
             onUserInteraction()
             onPlayPause()
           }.padding(8.dp),
@@ -1231,6 +1267,7 @@ private fun ExpandedIsland(
         color = Color.White,
         modifier =
           Modifier.clickable {
+            Log.d(ISLAND_LOG_TAG, "Expanded next tapped")
             onUserInteraction()
             onNext()
           }.padding(8.dp),
@@ -1361,13 +1398,8 @@ private fun IslandBackgroundLayer(
   cornerRadius: Dp,
 ) {
   val shape = RoundedCornerShape(cornerRadius)
-  val fallbackColors = listOf(Color(0xFF30202A), Color(0xFF171217), Color(0xFF090909))
-  val colors =
-    when {
-      paletteColors.size >= 2 -> paletteColors
-      paletteColors.size == 1 -> paletteColors + fallbackColors.drop(1)
-      else -> fallbackColors
-    }
+  val colors = paletteColors.distinct()
+  val hasValidPalette = colors.size >= 2
   val borderModifier =
     if (style == "LIQUID_GLASS") {
       Modifier.border(1.dp, Color.White.copy(alpha = if (isCollapsed) 0.12f else 0.2f), shape)
@@ -1394,24 +1426,30 @@ private fun IslandBackgroundLayer(
       }
       "GRADIENT",
       "APPLE_MUSIC" -> {
-        Box(
-          Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(colors + Color(0xFF070707)))
-        )
+        if (hasValidPalette) {
+          Box(
+            Modifier.fillMaxSize()
+              .background(Brush.verticalGradient(colors + Color(0xFF070707)))
+          )
+        }
       }
       "GLOW_ANIMATED",
       "LIVE_MESH" -> {
-        PaletteAnimatedBackground(
-          colors = colors,
-          isPlaying = isPlaying,
-          liveMesh = style == "LIVE_MESH",
-        )
+        if (hasValidPalette) {
+          PaletteAnimatedBackground(
+            colors = colors,
+            isPlaying = isPlaying,
+            liveMesh = style == "LIVE_MESH",
+          )
+        }
       }
       "LIQUID_GLASS" -> {
-        Box(
-          Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(colors.map { it.copy(alpha = 0.72f) }))
-        )
+        if (hasValidPalette) {
+          Box(
+            Modifier.fillMaxSize()
+              .background(Brush.verticalGradient(colors.map { it.copy(alpha = 0.72f) }))
+          )
+        }
       }
     }
 

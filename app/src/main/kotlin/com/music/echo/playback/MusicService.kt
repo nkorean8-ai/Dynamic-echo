@@ -2,6 +2,7 @@
 
 package echo.music.iad1tya.playback
 
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -478,19 +479,32 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   val isMuted = MutableStateFlow(false)
 
   private fun updateIslandState() {
+    val playbackState = player.playbackState
+    if (
+      player.currentMediaItem == null ||
+        playbackState == Player.STATE_IDLE ||
+        playbackState == Player.STATE_ENDED
+    ) {
+      islandController.updatePlayback(null)
+      return
+    }
     val metadata = currentMediaMetadata.value ?: player.currentMetadata
+    if (metadata == null) {
+      islandController.updatePlayback(null)
+      return
+    }
     islandController.updatePlayback(
-      metadata?.let {
-        IslandPlaybackState(
-          trackId = it.id,
-          title = it.title,
-          artist = it.artists.joinToString(", ") { artist -> artist.name },
-          artworkUri = it.thumbnailUrl,
-          positionMs = player.currentPosition.coerceAtLeast(0L),
-          durationMs = player.duration.takeIf { duration -> duration > 0L } ?: it.duration * 1000L,
-          isPlaying = player.isPlaying,
-        )
-      }
+      IslandPlaybackState(
+        trackId = metadata.id,
+        title = metadata.title,
+        artist = metadata.artists.joinToString(", ") { artist -> artist.name },
+        artworkUri = metadata.thumbnailUrl,
+        positionMs = player.currentPosition.coerceAtLeast(0L),
+        durationMs =
+          player.duration.takeIf { duration -> duration > 0L } ?: metadata.duration * 1000L,
+        isPlaying = player.isPlaying,
+        isPaused = playbackState == Player.STATE_READY && !player.playWhenReady,
+      )
     )
   }
 
@@ -912,10 +926,10 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           IslandSettings(
             enabled = preferences[IslandEnabledKey] ?: false,
             singleTapExpand = preferences[IslandSingleTapExpandKey] ?: true,
-            autoHideSeconds = preferences[IslandAutoHideSecondsKey] ?: 30,
+            autoHideSeconds = preferences[IslandAutoHideSecondsKey] ?: 60,
             inactivitySeconds = preferences[IslandInactivitySecondsKey] ?: 5,
             showTrackChange = preferences[IslandShowTrackChangeKey] ?: true,
-            verticalOffsetDp = preferences[IslandVerticalOffsetKey] ?: 0,
+            verticalOffsetDp = preferences[IslandVerticalOffsetKey] ?: -22,
             backgroundStyle =
               preferences[IslandBackgroundStyleKey] ?: PlayerBackgroundStyle.DEFAULT.name,
             followMiniPlayerStyle = preferences[IslandFollowMiniPlayerStyleKey] ?: false,
@@ -943,16 +957,51 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
       toggleLibrary = ::toggleLibrary
       onAutomotiveConnected = { prefetchQueueArtwork() }
     }
+    val sessionActivityCreatorOptions =
+      if (Build.VERSION.SDK_INT >= 35) {
+        ActivityOptions.makeBasic().apply {
+          pendingIntentCreatorBackgroundActivityStartMode =
+            if (Build.VERSION.SDK_INT >= 36) {
+              ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
+            } else {
+              ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
+        }.toBundle()
+      } else {
+        null
+      }
+    val sessionActivity =
+      PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java),
+        PendingIntent.FLAG_IMMUTABLE,
+        sessionActivityCreatorOptions,
+      )
+    islandController.setSessionActivityFallback {
+      val sendOptions =
+        when {
+          Build.VERSION.SDK_INT >= 36 ->
+            ActivityOptions.makeBasic().apply {
+              pendingIntentBackgroundActivityStartMode =
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
+            }.toBundle()
+          Build.VERSION.SDK_INT >= 34 ->
+            ActivityOptions.makeBasic().apply {
+              pendingIntentBackgroundActivityStartMode =
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }.toBundle()
+          else -> null
+        }
+      try {
+        if (sendOptions == null) sessionActivity.send() else sessionActivity.send(sendOptions)
+      } catch (error: PendingIntent.CanceledException) {
+        Timber.tag(TAG).e(error, "Unable to send the media session activity PendingIntent")
+      }
+    }
     mediaSession =
       MediaLibrarySession.Builder(this, SessionArtworkPlayer(this, player), mediaLibrarySessionCallback)
-        .setSessionActivity(
-          PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE,
-          ),
-        )
+        .setSessionActivity(sessionActivity)
         .setBitmapLoader(sessionBitmapLoader)
         .setCommandButtonsForMediaItems(automotiveItemActions())
         .build()
@@ -5087,6 +5136,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   }
 
   override fun onDestroy() {
+    islandController.setSessionActivityFallback(null)
     islandController.updatePlayback(null)
     isRunning = false
     savePodcastPosition()

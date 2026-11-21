@@ -137,11 +137,11 @@ fun PlayerSettings(
   val (islandEnabled, onIslandEnabledChange) =
     rememberPreference(IslandEnabledKey, defaultValue = false)
   val (islandAutoHideSeconds, onIslandAutoHideSecondsChange) =
-    rememberPreference(IslandAutoHideSecondsKey, defaultValue = 30)
+    rememberPreference(IslandAutoHideSecondsKey, defaultValue = 60)
   val (islandShowTrackChange, onIslandShowTrackChange) =
     rememberPreference(IslandShowTrackChangeKey, defaultValue = true)
   val (islandVerticalOffset, onIslandVerticalOffsetChange) =
-    rememberPreference(IslandVerticalOffsetKey, defaultValue = 0)
+    rememberPreference(IslandVerticalOffsetKey, defaultValue = -22)
 
   val (audioOffload, onAudioOffloadChange) =
     rememberPreference(key = AudioOffload, defaultValue = false)
@@ -958,6 +958,25 @@ fun PlayerSettings(
                     )
                   )
                 }
+              }
+            )
+          )
+          add(
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_auto_hide)),
+              icon = painterResource(R.drawable.timer),
+              title = { Text(stringResource(R.string.island_auto_hide)) },
+              description = {
+                Text(stringResource(R.string.island_auto_hide_value, islandAutoHideSeconds))
+              },
+              onClick = {
+                onIslandAutoHideSecondsChange(
+                  when (islandAutoHideSeconds) {
+                    15 -> 30
+                    30 -> 60
+                    else -> 15
+                  }
+                )
               }
             )
           )

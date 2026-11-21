@@ -98,8 +98,9 @@ palette extracted from the current artwork, applied to the collapsed pill, expan
 or both; the default remains near-black. The service-hosted Compose tree has no app
 backdrop, so its Liquid Glass option is a dark artwork-tinted treatment rather than a
 behind-window blur.
-Palette-derived gradients must retain at least two colors when artwork extraction yields
-only one swatch, so optional backgrounds remain crash-safe for every cover.
+Palette-derived gradients are drawn only when extraction yields at least two distinct
+swatches; otherwise the background remains a safe solid near-black, so optional styles
+remain crash-safe for every cover.
 
 The overlay must respect display-cutout/status-bar insets, disappear while Echo Music is
 foreground, and use only upward swipe to collapse from the expanded panel. A compact tap
@@ -107,11 +108,12 @@ expands the panel; it must not open the app or depend on long press. Expanded ar
 empty area, controls, and seek dragging remain inside the panel and outside taps collapse
 it. The content morphs with a spring inside a correctly sized overlay window: enlarge the
 window before expanding and keep it expanded until the collapse morph completes. The
-3/5/8/10-second or Off timeout is reset by actual panel touches, never by playback or
-metadata updates; a seek drag suppresses it until release. Dispose the Compose content
-when the overlay window detaches, and remove WindowManager-registered views even if their
-first attach callback has not run yet; the service-owned lifecycle must remain alive until
-the view is no longer registered.
+3/5/8/10-second or Off expanded-panel timeout is reset by actual panel touches, never by
+playback or metadata updates; a seek drag suppresses it until release. Paused playback has
+a separate configurable auto-hide, defaulting to 60 seconds on fresh installs. Dispose the
+Compose content when the overlay window detaches, and remove WindowManager-registered views
+even if their first attach callback has not run yet; the service-owned lifecycle must remain
+alive until the view is no longer registered.
 
 
 ## Music Flow
