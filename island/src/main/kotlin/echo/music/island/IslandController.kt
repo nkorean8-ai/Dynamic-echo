@@ -30,11 +30,20 @@ data class IslandSettings(
   val autoHideSeconds: Int = 60,
   val inactivitySeconds: Int = 5,
   val showTrackChange: Boolean = true,
-  val verticalOffsetDp: Int = -22,
+  val verticalCalibrationDp: Int = 0,
+  val horizontalOffsetDp: Int = 0,
+  val compactWidthDp: Int = 140,
+  val compactHeightDp: Int = 32,
+  val invertSwipes: Boolean = false,
+  val hideInForeground: Boolean = true,
   val backgroundStyle: String = "DEFAULT",
   val followMiniPlayerStyle: Boolean = false,
   val miniPlayerBackgroundStyle: String = "DEFAULT",
   val backgroundTarget: String = "EXPANDED",
+  val sliderStyle: String = "DEFAULT",
+  val followPlayerSliderStyle: Boolean = false,
+  val playerSliderStyle: String = "SLIM",
+  val playerSliderSquiggly: Boolean = false,
   val hapticsEnabled: Boolean = false,
   val clickHapticsEnabled: Boolean = true,
 )
@@ -54,6 +63,7 @@ class IslandController @Inject constructor(
   @Volatile private var onNext: (() -> Unit)? = null
   @Volatile private var onSeek: ((Long) -> Unit)? = null
   @Volatile private var onSessionActivityFallback: (() -> Unit)? = null
+  @Volatile private var islandRenderers: IslandRenderers? = null
 
   fun updatePlayback(state: IslandPlaybackState?) {
     _playback.value = state
@@ -85,6 +95,12 @@ class IslandController @Inject constructor(
   fun setSessionActivityFallback(action: (() -> Unit)?) {
     onSessionActivityFallback = action
   }
+
+  fun setRenderers(renderers: IslandRenderers?) {
+    islandRenderers = renderers
+  }
+
+  fun renderers(): IslandRenderers? = islandRenderers
 
   fun openApp() {
     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)

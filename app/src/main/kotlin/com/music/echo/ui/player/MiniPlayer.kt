@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -107,6 +108,8 @@ import echo.music.iad1tya.constants.CropAlbumArtKey
 import echo.music.iad1tya.constants.DarkModeKey
 import echo.music.iad1tya.constants.MiniPlayerBackgroundStyleKey
 import echo.music.iad1tya.constants.MiniPlayerHeight
+import echo.music.iad1tya.constants.MiniPlayerControlsMode
+import echo.music.iad1tya.constants.MiniPlayerControlsModeKey
 import echo.music.iad1tya.constants.PlayerBackgroundStyle
 import echo.music.iad1tya.constants.PureBlackKey
 import echo.music.iad1tya.constants.PureBlackMiniPlayerKey
@@ -256,16 +259,35 @@ fun MiniPlayer(
       )
     }
   } else if (useNewMiniPlayerDesign) {
-    NewMiniPlayer(progressState = progressState, modifier = modifier)
+    val controlsMode by
+      rememberEnumPreference(MiniPlayerControlsModeKey, MiniPlayerControlsMode.BUTTONS)
+    NewMiniPlayer(
+      progressState = progressState,
+      controlsMode = controlsMode,
+      onClick = onClick,
+      modifier = modifier,
+    )
   } else {
+    val controlsMode by
+      rememberEnumPreference(MiniPlayerControlsModeKey, MiniPlayerControlsMode.BUTTONS)
     Box(modifier = modifier.fillMaxWidth()) {
-      LegacyMiniPlayer(progressState = progressState, modifier = Modifier.align(Alignment.Center))
+      LegacyMiniPlayer(
+        progressState = progressState,
+        controlsMode = controlsMode,
+        onClick = onClick,
+        modifier = Modifier.align(Alignment.Center),
+      )
     }
   }
 }
 
 @Composable
-private fun NewMiniPlayer(progressState: ProgressState, modifier: Modifier = Modifier) {
+private fun NewMiniPlayer(
+  progressState: ProgressState,
+  controlsMode: MiniPlayerControlsMode,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
   val playerConnection = LocalPlayerConnection.current ?: return
 
   val pureBlackMini by rememberPreference(PureBlackMiniPlayerKey, defaultValue = false)
@@ -310,6 +332,8 @@ private fun NewMiniPlayer(progressState: ProgressState, modifier: Modifier = Mod
       }
     }
   val isCasting by castHandler?.isCasting?.collectAsState() ?: remember { mutableStateOf(false) }
+  val castIsPlaying by
+    castHandler?.castIsPlaying?.collectAsState() ?: remember { mutableStateOf(false) }
   val castDeviceName by
     castHandler?.castDeviceName?.collectAsState() ?: remember { mutableStateOf(null) }
 
@@ -323,6 +347,8 @@ private fun NewMiniPlayer(progressState: ProgressState, modifier: Modifier = Mod
   val listenTogetherManager = LocalListenTogetherManager.current
   val isListenTogetherGuest = listenTogetherManager?.let { it.isGuestPlaybackRestricted } ?: false
   val swipeThumbnail = swipeThumbnailPref && !isListenTogetherGuest
+  val gesturesMode =
+    controlsMode == MiniPlayerControlsMode.GESTURES && swipeThumbnail
 
   val layoutDirection = LocalLayoutDirection.current
   val coroutineScope = rememberCoroutineScope()
@@ -351,7 +377,7 @@ private fun NewMiniPlayer(progressState: ProgressState, modifier: Modifier = Mod
     remember { mutableStateOf<List<Color>>(emptyList()) }
 
   MiniPlayerColorExtractor(
-    mediaMetadata = mediaMetadata,
+    artworkUri = mediaMetadata?.thumbnailUrl,
     miniPlayerBackground = miniPlayerBackground,
     onGradientColorsChange = onGradientColorsChange
   )
@@ -398,6 +424,44 @@ private fun NewMiniPlayer(progressState: ProgressState, modifier: Modifier = Mod
         .height(MiniPlayerHeight)
         .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
         .padding(horizontal = 12.dp)
+        .let { baseModifier ->
+          if (gesturesMode) {
+            baseModifier
+              .combinedClickable(
+                onClick = onClick,
+                onDoubleClick = {
+                  if (!isListenTogetherGuest) {
+                    performMiniPlayerPlayPause(
+                      playerConnection,
+                      playbackState,
+                      isCasting,
+                      castIsPlaying,
+                      castHandler,
+                      isListenTogetherGuest,
+                    )
+                  }
+                },
+              )
+              .miniPlayerGestureSemantics(
+                enabled = true,
+                isGuest = isListenTogetherGuest,
+                onPrevious = { playerConnection.player.seekToPreviousMediaItem() },
+                onPlayPause = {
+                  performMiniPlayerPlayPause(
+                    playerConnection,
+                    playbackState,
+                    isCasting,
+                    castIsPlaying,
+                    castHandler,
+                    isListenTogetherGuest,
+                  )
+                },
+                onNext = { playerConnection.player.seekToNext() },
+              )
+          } else {
+            baseModifier
+          }
+        }
         .let { baseModifier ->
           if (swipeThumbnail) {
             baseModifier.pointerInput(Unit) {
@@ -476,8 +540,8 @@ private fun NewMiniPlayer(progressState: ProgressState, modifier: Modifier = Mod
     ) {
       MiniPlayerBackgroundLayer(
         style = miniPlayerBackground,
-        mediaMetadata = mediaMetadata,
-        gradientColors = gradientColors
+        artworkUri = mediaMetadata?.thumbnailUrl,
+        gradientColors = gradientColors,
       )
 
       Row(
@@ -521,18 +585,20 @@ private fun NewMiniPlayer(progressState: ProgressState, modifier: Modifier = Mod
           Spacer(modifier = Modifier.width(8.dp))
         }
 
-        MiniPlayerControls(
-          playerConnection = playerConnection,
-          playbackState = playbackState,
-          isCasting = isCasting,
-          castHandler = castHandler,
-          listenTogetherManager = listenTogetherManager,
-          canSkipPrevious = canSkipPrevious,
-          canSkipNext = canSkipNext,
-          onSurfaceColor = onSurfaceColor,
-          primaryColor = primaryColor,
-          onPrimaryColor = onPrimaryColor
-        )
+        if (!gesturesMode) {
+          MiniPlayerControls(
+            playerConnection = playerConnection,
+            playbackState = playbackState,
+            isCasting = isCasting,
+            castHandler = castHandler,
+            listenTogetherManager = listenTogetherManager,
+            canSkipPrevious = canSkipPrevious,
+            canSkipNext = canSkipNext,
+            onSurfaceColor = onSurfaceColor,
+            primaryColor = primaryColor,
+            onPrimaryColor = onPrimaryColor
+          )
+        }
       }
     }
   }
@@ -659,7 +725,12 @@ private fun NewMiniPlayerSongInfo(
 }
 
 @Composable
-private fun LegacyMiniPlayer(progressState: ProgressState, modifier: Modifier = Modifier) {
+private fun LegacyMiniPlayer(
+  progressState: ProgressState,
+  controlsMode: MiniPlayerControlsMode,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
   val playerConnection = LocalPlayerConnection.current ?: return
   val pureBlackMini by rememberPreference(PureBlackMiniPlayerKey, defaultValue = false)
   val isSystemInDarkTheme = isSystemInDarkTheme()
@@ -702,6 +773,8 @@ private fun LegacyMiniPlayer(progressState: ProgressState, modifier: Modifier = 
       }
     }
   val isCasting by castHandler?.isCasting?.collectAsState() ?: remember { mutableStateOf(false) }
+  val castIsPlaying by
+    castHandler?.castIsPlaying?.collectAsState() ?: remember { mutableStateOf(false) }
 
   val swipeSensitivity by rememberPreference(SwipeSensitivityKey, 0.73f)
   val swipeThumbnailPref by rememberPreference(SwipeThumbnailKey, true)
@@ -709,6 +782,8 @@ private fun LegacyMiniPlayer(progressState: ProgressState, modifier: Modifier = 
   val listenTogetherManager = LocalListenTogetherManager.current
   val isListenTogetherGuest = listenTogetherManager?.let { it.isGuestPlaybackRestricted } ?: false
   val swipeThumbnail = swipeThumbnailPref && !isListenTogetherGuest
+  val gesturesMode =
+    controlsMode == MiniPlayerControlsMode.GESTURES && swipeThumbnail
 
   val layoutDirection = LocalLayoutDirection.current
   val coroutineScope = rememberCoroutineScope()
@@ -749,6 +824,44 @@ private fun LegacyMiniPlayer(progressState: ProgressState, modifier: Modifier = 
           if (pureBlack && isSystemInDarkTheme()) Color.Black
           else MaterialTheme.colorScheme.surfaceContainer
         )
+        .let { baseModifier ->
+          if (gesturesMode) {
+            baseModifier
+              .combinedClickable(
+                onClick = onClick,
+                onDoubleClick = {
+                  if (!isListenTogetherGuest) {
+                    performMiniPlayerPlayPause(
+                      playerConnection,
+                      playbackState,
+                      isCasting,
+                      castIsPlaying,
+                      castHandler,
+                      isListenTogetherGuest,
+                    )
+                  }
+                },
+              )
+              .miniPlayerGestureSemantics(
+                enabled = true,
+                isGuest = isListenTogetherGuest,
+                onPrevious = { playerConnection.player.seekToPreviousMediaItem() },
+                onPlayPause = {
+                  performMiniPlayerPlayPause(
+                    playerConnection,
+                    playbackState,
+                    isCasting,
+                    castIsPlaying,
+                    castHandler,
+                    isListenTogetherGuest,
+                  )
+                },
+                onNext = { playerConnection.player.seekToNext() },
+              )
+          } else {
+            baseModifier
+          }
+        }
         .let { baseModifier ->
           if (swipeThumbnail) {
             baseModifier.pointerInput(Unit) {
@@ -833,19 +946,21 @@ private fun LegacyMiniPlayer(progressState: ProgressState, modifier: Modifier = 
         }
       }
 
-      LegacyPlayPauseButton(
-        playbackState = playbackState,
-        isCasting = isCasting,
-        castHandler = castHandler,
-        playerConnection = playerConnection,
-        listenTogetherManager = listenTogetherManager
-      )
+      if (!gesturesMode) {
+        LegacyPlayPauseButton(
+          playbackState = playbackState,
+          isCasting = isCasting,
+          castHandler = castHandler,
+          playerConnection = playerConnection,
+          listenTogetherManager = listenTogetherManager
+        )
 
-      IconButton(
-        enabled = canSkipNext && !isListenTogetherGuest,
-        onClick = if (isListenTogetherGuest) ({}) else ({ playerConnection.seekToNext() }),
-      ) {
-        Icon(painter = painterResource(R.drawable.skip_next), contentDescription = null)
+        IconButton(
+          enabled = canSkipNext && !isListenTogetherGuest,
+          onClick = if (isListenTogetherGuest) ({}) else ({ playerConnection.seekToNext() }),
+        ) {
+          Icon(painter = painterResource(R.drawable.skip_next), contentDescription = null)
+        }
       }
     }
 
@@ -892,18 +1007,14 @@ private fun LegacyPlayPauseButton(
 
   IconButton(
     onClick = {
-      if (isListenTogetherGuest) {
-        playerConnection.toggleMute()
-        return@IconButton
-      }
-      if (isCasting) {
-        if (castIsPlaying) castHandler?.pause() else castHandler?.play()
-      } else if (playbackState == Player.STATE_ENDED) {
-        playerConnection.player.seekTo(0, 0)
-        playerConnection.player.playWhenReady = true
-      } else {
-        playerConnection.togglePlayPause()
-      }
+      performMiniPlayerPlayPause(
+        playerConnection,
+        playbackState,
+        isCasting,
+        castIsPlaying,
+        castHandler,
+        isListenTogetherGuest,
+      )
     },
   ) {
     Icon(
@@ -919,6 +1030,26 @@ private fun LegacyPlayPauseButton(
       contentDescription = null,
       tint = tint,
     )
+  }
+}
+
+private fun performMiniPlayerPlayPause(
+  playerConnection: PlayerConnection,
+  playbackState: Int,
+  isCasting: Boolean,
+  castIsPlaying: Boolean,
+  castHandler: CastConnectionHandler?,
+  isListenTogetherGuest: Boolean,
+) {
+  if (isListenTogetherGuest) {
+    playerConnection.toggleMute()
+  } else if (isCasting) {
+    if (castIsPlaying) castHandler?.pause() else castHandler?.play()
+  } else if (playbackState == Player.STATE_ENDED) {
+    playerConnection.player.seekTo(0, 0)
+    playerConnection.player.playWhenReady = true
+  } else {
+    playerConnection.togglePlayPause()
   }
 }
 
@@ -1033,217 +1164,6 @@ private fun FavoriteButton(
 }
 
 @Composable
-private fun MiniPlayerColorExtractor(
-  mediaMetadata: MediaMetadata?,
-  miniPlayerBackground: PlayerBackgroundStyle,
-  onGradientColorsChange: (List<Color>) -> Unit
-) {
-  val context = LocalContext.current
-  val fallbackColor = MaterialTheme.colorScheme.surfaceContainer.toArgb()
-
-  LaunchedEffect(mediaMetadata?.id, miniPlayerBackground) {
-    if (
-      miniPlayerBackground == PlayerBackgroundStyle.GRADIENT ||
-        miniPlayerBackground == PlayerBackgroundStyle.GLOW_ANIMATED
-    ) {
-      val currentMetadata = mediaMetadata
-      if (currentMetadata?.thumbnailUrl != null) {
-        withContext(Dispatchers.IO) {
-          val request =
-            ImageRequest.Builder(context)
-              .data(currentMetadata.thumbnailUrl)
-              .size(100, 100)
-              .allowHardware(false)
-              .build()
-
-          val result = runCatching { context.imageLoader.execute(request) }.getOrNull()
-          if (result != null) {
-            val bitmap = result.image?.toBitmap()
-            if (bitmap != null) {
-              val palette =
-                withContext(Dispatchers.Default) {
-                  Palette.from(bitmap).maximumColorCount(8).resizeBitmapArea(100 * 100).generate()
-                }
-              val extractedColors =
-                if (miniPlayerBackground == PlayerBackgroundStyle.GLOW_ANIMATED) {
-                  listOfNotNull(
-                      palette.getVibrantColor(fallbackColor).let { Color(it) },
-                      palette.getLightVibrantColor(fallbackColor).let { Color(it) },
-                      palette.getDarkVibrantColor(fallbackColor).let { Color(it) },
-                      palette.getMutedColor(fallbackColor).let { Color(it) },
-                      palette.getLightMutedColor(fallbackColor).let { Color(it) },
-                      palette.getDarkMutedColor(fallbackColor).let { Color(it) }
-                    )
-                    .distinct()
-                } else {
-                  PlayerColorExtractor.extractGradientColors(
-                    palette = palette,
-                    fallbackColor = fallbackColor
-                  )
-                }
-              withContext(Dispatchers.Main) { onGradientColorsChange(extractedColors) }
-            }
-          }
-        }
-      }
-    } else {
-      onGradientColorsChange(emptyList())
-    }
-  }
-}
-
-@Composable
-private fun MiniPlayerBackgroundLayer(
-  style: PlayerBackgroundStyle,
-  mediaMetadata: MediaMetadata?,
-  gradientColors: List<Color>
-) {
-  val context = LocalContext.current
-
-  when (style) {
-    PlayerBackgroundStyle.BLUR -> {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        AsyncImage(
-          model =
-            ImageRequest.Builder(context)
-              .data(mediaMetadata?.thumbnailUrl)
-              .size(128, 128)
-              .allowHardware(false)
-              .build(),
-          contentDescription = null,
-          contentScale = ContentScale.Crop,
-          modifier = Modifier.fillMaxSize().blur(30.dp)
-        )
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
-      }
-    }
-    PlayerBackgroundStyle.GRADIENT -> {
-      if (gradientColors.isNotEmpty()) {
-        Box(
-          modifier =
-            Modifier.fillMaxSize()
-              .background(Brush.verticalGradient(gradientColors))
-              .background(Color.Black.copy(alpha = 0.2f))
-        )
-      }
-    }
-    PlayerBackgroundStyle.GLOW_ANIMATED -> {
-      if (gradientColors.isNotEmpty()) {
-        val infiniteTransition = rememberInfiniteTransition(label = "GlowAnimation")
-        val progress =
-          infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec =
-              infiniteRepeatable(
-                animation = tween(20000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-              ),
-            label = "glowProgress"
-          )
-
-        val colors = gradientColors
-        Box(
-          modifier =
-            Modifier.fillMaxSize().drawBehind {
-              val p = progress.value
-              val width = size.width
-              val height = size.height
-
-              fun rotatedColorAt(index: Int): Color {
-                val size = colors.size
-                val idx = index.toFloat() + p * size
-                val a = kotlin.math.floor(idx).toInt() % size
-                val b = (a + 1) % size
-                val frac = idx - kotlin.math.floor(idx)
-                return lerp(colors[a], colors[b], frac)
-              }
-
-              fun oscillate(min: Float, max: Float, phase: Float): Float {
-                val v = kotlin.math.sin(2f * kotlin.math.PI.toFloat() * (p + phase))
-                return min + (max - min) * ((v + 1f) * 0.5f)
-              }
-
-              val c1 = rotatedColorAt(0)
-              val c2 = rotatedColorAt(1)
-
-              val o1x = oscillate(0.0f, 1.0f, 0.0f)
-              val o1y = oscillate(0.0f, 0.5f, 0.1f)
-              val o2x = oscillate(1.0f, 0.0f, 0.2f)
-              val o2y = oscillate(0.5f, 1.0f, 0.3f)
-
-              val b1 =
-                Brush.radialGradient(
-                  colors = listOf(c1.copy(alpha = 0.8f), Color.Transparent),
-                  center = Offset(width * o1x, height * o1y),
-                  radius = width * 1.2f
-                )
-              val b2 =
-                Brush.radialGradient(
-                  colors = listOf(c2.copy(alpha = 0.7f), Color.Transparent),
-                  center = Offset(width * o2x, height * o2y),
-                  radius = width * 1.0f
-                )
-
-              drawRect(Color(0xFF050505))
-              drawRect(b1)
-              drawRect(b2)
-            }
-        )
-      }
-    }
-    PlayerBackgroundStyle.LIVE_MESH -> {
-      val infiniteTransition = rememberInfiniteTransition(label = "liveMesh")
-      val rotation =
-        infiniteTransition.animateFloat(
-          initialValue = 0f,
-          targetValue = 360f,
-          animationSpec =
-            infiniteRepeatable(
-              animation = tween(60000, easing = LinearEasing),
-              repeatMode = RepeatMode.Restart
-            ),
-          label = "rotation"
-        )
-
-      Box(
-        modifier =
-          Modifier.fillMaxSize().graphicsLayer {
-            scaleX = 1.5f
-            scaleY = 1.5f
-          }
-      ) {
-        val matrix = remember { ColorMatrix().apply { setToSaturation(1.6f) } }
-        AsyncImage(
-          model =
-            ImageRequest.Builder(context)
-              .data(mediaMetadata?.thumbnailUrl)
-              .size(128, 128)
-              .allowHardware(false)
-              .build(),
-          contentDescription = null,
-          contentScale = ContentScale.Crop,
-          colorFilter = ColorFilter.colorMatrix(matrix),
-          modifier = Modifier.fillMaxSize().blur(40.dp).graphicsLayer { rotationZ = rotation.value }
-        )
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
-      }
-    }
-    PlayerBackgroundStyle.LIQUID_GLASS -> {
-      if (gradientColors.isNotEmpty()) {
-        Box(
-          modifier =
-            Modifier.fillMaxSize()
-              .background(Brush.verticalGradient(gradientColors))
-              .background(Color.Black.copy(alpha = 0.2f))
-        )
-      }
-    }
-    else -> {}
-  }
-}
-
-@Composable
 private fun MiniPlayerControls(
   playerConnection: PlayerConnection,
   playbackState: Int,
@@ -1314,18 +1234,14 @@ private fun MiniPlayerControls(
       contentAlignment = Alignment.Center,
       modifier =
         Modifier.size(48.dp).clip(CircleShape).clickable {
-          if (isListenTogetherGuest) {
-            playerConnection.toggleMute()
-            return@clickable
-          }
-          if (isCasting) {
-            if (castIsPlaying) castHandler?.pause() else castHandler?.play()
-          } else if (playbackState == Player.STATE_ENDED) {
-            playerConnection.player.seekTo(0, 0)
-            playerConnection.player.playWhenReady = true
-          } else {
-            playerConnection.togglePlayPause()
-          }
+          performMiniPlayerPlayPause(
+            playerConnection,
+            playbackState,
+            isCasting,
+            castIsPlaying,
+            castHandler,
+            isListenTogetherGuest,
+          )
         }
     ) {
       Box(

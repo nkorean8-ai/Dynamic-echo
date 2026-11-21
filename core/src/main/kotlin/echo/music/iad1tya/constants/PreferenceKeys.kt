@@ -69,6 +69,7 @@ val GridItemsSizeKey = stringPreferencesKey("gridItemSize")
 val SliderStyleKey = stringPreferencesKey("sliderStyle")
 val SquigglySliderKey = booleanPreferencesKey("squigglySlider")
 val WavyPlayPauseKey = booleanPreferencesKey("wavyPlayPause")
+val MiniPlayerControlsModeKey = stringPreferencesKey("mini_player_controls_mode")
 val SwipeToSongKey = booleanPreferencesKey("SwipeToSong")
 val SwipeToRemoveSongKey = booleanPreferencesKey("SwipeToRemoveSong")
 val UseNewPlayerDesignKey = booleanPreferencesKey("useNewPlayerDesign")
@@ -91,6 +92,11 @@ enum class SliderStyle {
   DEFAULT,
   WAVY,
   SLIM,
+}
+
+enum class MiniPlayerControlsMode {
+  BUTTONS,
+  GESTURES,
 }
 
 const val SYSTEM_DEFAULT = "SYSTEM_DEFAULT"
@@ -829,6 +835,14 @@ val IslandAutoHideSecondsKey = intPreferencesKey("island_auto_hide_seconds")
 val IslandInactivitySecondsKey = intPreferencesKey("island_inactivity_seconds")
 val IslandShowTrackChangeKey = booleanPreferencesKey("island_show_track_change")
 val IslandVerticalOffsetKey = intPreferencesKey("island_vertical_offset")
+val IslandVerticalCalibrationKey = intPreferencesKey("island_vertical_calibration_v2")
+val IslandHorizontalOffsetKey = intPreferencesKey("island_horizontal_offset")
+val IslandCompactWidthKey = intPreferencesKey("island_compact_width")
+val IslandCompactHeightKey = intPreferencesKey("island_compact_height")
+val IslandInvertSwipesKey = booleanPreferencesKey("island_invert_swipes")
+val IslandHideInForegroundKey = booleanPreferencesKey("island_hide_in_foreground")
+val IslandSliderStyleKey = stringPreferencesKey("island_slider_style")
+val IslandFollowPlayerSliderStyleKey = booleanPreferencesKey("island_follow_player_slider_style")
 enum class IslandBackgroundTarget {
   COLLAPSED,
   EXPANDED,

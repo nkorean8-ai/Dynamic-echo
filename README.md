@@ -336,6 +336,10 @@ Echo Music stands on the shoulders of several excellent open-source projects. Si
 | **[Music Recognizer](https://github.com/aleksey-saenko/MusicRecognizer)**                                                 | Audio recognition (Echo Find)                       |
 | **[BravePipe](https://github.com/bravepipeproject/BravePipe)**                                                            | Decryption handling and backup playback engine      |
 
+Echo Music is derived in part from the GPL-3.0-licensed Metrolist project. This repository
+is distributed under GPL-3.0; retain the applicable copyright and license notices when
+redistributing derived source.
+
 ---
 
 ## Legal Disclaimer & Terms of Use

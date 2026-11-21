@@ -377,18 +377,21 @@ is the single state bridge from `MusicService` to the overlay service; it never 
 player. The service uses a ComposeView with explicit lifecycle, saved-state, and
 ViewModel-store owners, disposes composition on window detachment, tracks pending
 WindowManager attachment separately from view attachment, positions itself from
-status-bar/display-cutout insets, and removes itself while the app process is foregrounded.
+status-bar/display-cutout insets, and hides while the app process is foregrounded when that
+Appearance option is enabled.
 Overlay permission denial stops the service and leaves normal media playback/notification
 behavior unchanged.
 
 The overlay is intentionally monochrome by default: a black rounded pill, white metadata,
-playback-aware bars (static while paused), and a custom progress line. Optional artwork-
-palette backgrounds reuse `PlayerBackgroundStyle`; their target (collapsed, expanded, or
-both) and follow-mini-player behavior are stored in `Island*Key` preferences. The service-
+playback-aware bars (static while paused), and a seek slider. App-provided Compose slots reuse
+the mini-player background, waveform, and seek-slider renderers without coupling `:island` to
+`:app`. Optional artwork-palette backgrounds reuse `PlayerBackgroundStyle`; their target
+(collapsed, expanded, or both) and follow-mini-player behavior are stored in `Island*Key`
+preferences. The service-
 hosted Compose tree must keep its own lifecycle, saved-state, and ViewModel-store owners.
 The settings UI must keep the permission request explicit and explain the
-`SYSTEM_ALERT_WINDOW` requirement. The collapsed pill tap expands only: it never opens the
-app or requires a long press. Expanded touch-downs, controls, and seek gestures reset the
+`SYSTEM_ALERT_WINDOW` requirement. A single tap on the collapsed pill expands only: it never opens the
+app or requires a long press. Expanded touch-downs, artwork, and seek gestures reset the
 3/5/8/10-second or Off inactivity timer; playback and metadata updates do not. Seeking
 suppresses timeout while dragging and restarts it on drag end. The overlay uses
 `FLAG_WATCH_OUTSIDE_TOUCH`, `FLAG_NOT_TOUCH_MODAL`, and a four-state lifecycle (`Collapsed`,
@@ -399,15 +402,20 @@ backdrop to sample.
 The root touch listener handles `ACTION_OUTSIDE`, captures the compact-pill gesture stream,
 and forwards expanded-panel inside-window events to Compose. Artwork-derived gradients may
 only be drawn with at least two distinct colors; otherwise retain the solid near-black
-fallback. Fresh installs use a 60-second paused-playback auto-hide and a -22dp cutout offset;
+fallback. Fresh installs use a 60-second paused-playback auto-hide and 140x32dp compact pill;
 existing DataStore values must remain unchanged.
 Compact tap recognition uses one 300 ms tap-count window: single-tap expansion therefore
-waits briefly to distinguish double/triple taps. Right/left swipes map to next/previous.
+waits briefly to distinguish double/triple taps; double-tap toggles playback and triple-tap
+opens Echo Music. Right/left swipes map to next/previous by default, with a separate island
+invert-swipes preference. Horizontal gestures on the expanded panel also change tracks and
+double-tap toggles playback.
 Triple-tap launch first uses the explicit launch intent under the user-granted overlay
 permission and falls back to MusicService's existing session-activity PendingIntent with
-background-activity-launch options if direct launch is rejected. There is no island invert-
-swipe preference in the current preference schema; do not reinterpret mini-player swipe
-preferences as island settings.
+background-activity-launch options if direct launch is rejected. Appearance settings include
+vertical/horizontal calibration and compact pill dimensions. Legacy vertical-offset values
+are translated to preserve their effective placement. Mini-player controls can independently
+use buttons (default) or gesture mode; gesture mode is unavailable when thumbnail swipes are
+disabled or playback is guest-restricted.
 
 ## Library UI Separation
 

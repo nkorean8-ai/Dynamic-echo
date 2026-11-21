@@ -54,10 +54,6 @@ import echo.music.iad1tya.constants.EnableExportAsMp3Key
 import echo.music.iad1tya.constants.EnableGoogleCastKey
 import echo.music.iad1tya.constants.UsbDacVolumeModeKey
 import echo.music.iad1tya.constants.HistoryDuration
-import echo.music.iad1tya.constants.IslandAutoHideSecondsKey
-import echo.music.iad1tya.constants.IslandEnabledKey
-import echo.music.iad1tya.constants.IslandShowTrackChangeKey
-import echo.music.iad1tya.constants.IslandVerticalOffsetKey
 import echo.music.iad1tya.constants.KeepScreenOn
 import echo.music.iad1tya.constants.PauseOnMute
 import echo.music.iad1tya.constants.PersistentQueueKey
@@ -134,15 +130,6 @@ fun PlayerSettings(
 
   val (spatialAudio, onSpatialAudioChange) =
     rememberPreference(echo.music.iad1tya.constants.SpatialAudioKey, defaultValue = false)
-  val (islandEnabled, onIslandEnabledChange) =
-    rememberPreference(IslandEnabledKey, defaultValue = false)
-  val (islandAutoHideSeconds, onIslandAutoHideSecondsChange) =
-    rememberPreference(IslandAutoHideSecondsKey, defaultValue = 60)
-  val (islandShowTrackChange, onIslandShowTrackChange) =
-    rememberPreference(IslandShowTrackChangeKey, defaultValue = true)
-  val (islandVerticalOffset, onIslandVerticalOffsetChange) =
-    rememberPreference(IslandVerticalOffsetKey, defaultValue = -22)
-
   val (audioOffload, onAudioOffloadChange) =
     rememberPreference(key = AudioOffload, defaultValue = false)
 
@@ -910,117 +897,6 @@ fun PlayerSettings(
                 )
               },
               onClick = { onSpatialAudioChange(!spatialAudio) }
-            )
-          )
-          add(
-            Material3SettingsItem(
-              isHighlighted = (highlightKey == stringResource(R.string.island_enable)),
-              icon = painterResource(R.drawable.graphic_eq),
-              title = { Text(stringResource(R.string.island_enable)) },
-              description = { Text(stringResource(R.string.island_enable_desc)) },
-              trailingContent = {
-                Switch(
-                  checked = islandEnabled,
-                  onCheckedChange = {
-                    onIslandEnabledChange(it)
-                    if (
-                      it &&
-                        !android.provider.Settings.canDrawOverlays(context)
-                    ) {
-                      context.startActivity(
-                        android.content.Intent(
-                          android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                          android.net.Uri.parse("package:${context.packageName}")
-                        )
-                      )
-                    }
-                  },
-                  thumbContent = {
-                    Icon(
-                      painter =
-                        painterResource(
-                          id = if (islandEnabled) R.drawable.check else R.drawable.close
-                        ),
-                      contentDescription = null,
-                      modifier = Modifier.size(SwitchDefaults.IconSize)
-                    )
-                  }
-                )
-              },
-              onClick = {
-                val enabled = !islandEnabled
-                onIslandEnabledChange(enabled)
-                if (enabled && !android.provider.Settings.canDrawOverlays(context)) {
-                  context.startActivity(
-                    android.content.Intent(
-                      android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                      android.net.Uri.parse("package:${context.packageName}")
-                    )
-                  )
-                }
-              }
-            )
-          )
-          add(
-            Material3SettingsItem(
-              isHighlighted = (highlightKey == stringResource(R.string.island_auto_hide)),
-              icon = painterResource(R.drawable.timer),
-              title = { Text(stringResource(R.string.island_auto_hide)) },
-              description = {
-                Text(stringResource(R.string.island_auto_hide_value, islandAutoHideSeconds))
-              },
-              onClick = {
-                onIslandAutoHideSecondsChange(
-                  when (islandAutoHideSeconds) {
-                    15 -> 30
-                    30 -> 60
-                    else -> 15
-                  }
-                )
-              }
-            )
-          )
-          add(
-            Material3SettingsItem(
-              isHighlighted = (highlightKey == stringResource(R.string.island_show_track_change)),
-              icon = painterResource(R.drawable.queue_music),
-              title = { Text(stringResource(R.string.island_show_track_change)) },
-              description = { Text(stringResource(R.string.island_show_track_change_desc)) },
-              trailingContent = {
-                Switch(
-                  checked = islandShowTrackChange,
-                  onCheckedChange = onIslandShowTrackChange,
-                  thumbContent = {
-                    Icon(
-                      painter =
-                        painterResource(
-                          id = if (islandShowTrackChange) R.drawable.check else R.drawable.close
-                        ),
-                      contentDescription = null,
-                      modifier = Modifier.size(SwitchDefaults.IconSize)
-                    )
-                  }
-                )
-              },
-              onClick = { onIslandShowTrackChange(!islandShowTrackChange) }
-            )
-          )
-          add(
-            Material3SettingsItem(
-              isHighlighted = (highlightKey == stringResource(R.string.island_vertical_offset)),
-              icon = painterResource(R.drawable.graphic_eq),
-              title = { Text(stringResource(R.string.island_vertical_offset)) },
-              description = {
-                Text(stringResource(R.string.island_vertical_offset_value, islandVerticalOffset))
-              },
-              trailingContent = {
-                Slider(
-                  value = islandVerticalOffset.toFloat(),
-                  onValueChange = { onIslandVerticalOffsetChange(it.roundToInt()) },
-                  valueRange = -24f..48f,
-                  modifier = Modifier.size(width = 128.dp, height = 40.dp)
-                )
-              }
             )
           )
           add(

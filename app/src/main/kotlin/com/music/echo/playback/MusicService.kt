@@ -132,10 +132,20 @@ import echo.music.iad1tya.constants.IslandBackgroundTarget
 import echo.music.iad1tya.constants.IslandBackgroundTargetKey
 import echo.music.iad1tya.constants.IslandInactivitySecondsKey
 import echo.music.iad1tya.constants.IslandEnabledKey
+import echo.music.iad1tya.constants.IslandCompactHeightKey
+import echo.music.iad1tya.constants.IslandCompactWidthKey
 import echo.music.iad1tya.constants.IslandFollowMiniPlayerStyleKey
-import echo.music.iad1tya.constants.IslandSingleTapExpandKey
+import echo.music.iad1tya.constants.IslandFollowPlayerSliderStyleKey
+import echo.music.iad1tya.constants.IslandHideInForegroundKey
+import echo.music.iad1tya.constants.IslandHorizontalOffsetKey
+import echo.music.iad1tya.constants.IslandInvertSwipesKey
 import echo.music.iad1tya.constants.IslandShowTrackChangeKey
+import echo.music.iad1tya.constants.IslandSliderStyleKey
+import echo.music.iad1tya.constants.IslandSingleTapExpandKey
+import echo.music.iad1tya.constants.IslandVerticalCalibrationKey
 import echo.music.iad1tya.constants.IslandVerticalOffsetKey
+import echo.music.iad1tya.constants.SliderStyleKey
+import echo.music.iad1tya.constants.SquigglySliderKey
 import echo.music.iad1tya.constants.MiniPlayerBackgroundStyleKey
 import echo.music.iad1tya.constants.PlayerBackgroundStyle
 import echo.music.iad1tya.constants.EnableHapticsKey
@@ -920,6 +930,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
       next = player::seekToNext,
       seek = { positionMs -> player.seekTo(positionMs) },
     )
+    islandController.setRenderers(IslandAppRenderers)
     scope.launch {
       dataStore.data
         .map { preferences ->
@@ -929,7 +940,14 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
             autoHideSeconds = preferences[IslandAutoHideSecondsKey] ?: 60,
             inactivitySeconds = preferences[IslandInactivitySecondsKey] ?: 5,
             showTrackChange = preferences[IslandShowTrackChangeKey] ?: true,
-            verticalOffsetDp = preferences[IslandVerticalOffsetKey] ?: -22,
+            verticalCalibrationDp =
+              preferences[IslandVerticalCalibrationKey]
+                ?: ((preferences[IslandVerticalOffsetKey] ?: -22) + 22),
+            horizontalOffsetDp = preferences[IslandHorizontalOffsetKey] ?: 0,
+            compactWidthDp = preferences[IslandCompactWidthKey] ?: 140,
+            compactHeightDp = preferences[IslandCompactHeightKey] ?: 32,
+            invertSwipes = preferences[IslandInvertSwipesKey] ?: false,
+            hideInForeground = preferences[IslandHideInForegroundKey] ?: true,
             backgroundStyle =
               preferences[IslandBackgroundStyleKey] ?: PlayerBackgroundStyle.DEFAULT.name,
             followMiniPlayerStyle = preferences[IslandFollowMiniPlayerStyleKey] ?: false,
@@ -937,6 +955,10 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
               preferences[MiniPlayerBackgroundStyleKey] ?: PlayerBackgroundStyle.DEFAULT.name,
             backgroundTarget =
               preferences[IslandBackgroundTargetKey] ?: IslandBackgroundTarget.EXPANDED.name,
+            sliderStyle = preferences[IslandSliderStyleKey] ?: "DEFAULT",
+            followPlayerSliderStyle = preferences[IslandFollowPlayerSliderStyleKey] ?: false,
+            playerSliderStyle = preferences[SliderStyleKey] ?: "SLIM",
+            playerSliderSquiggly = preferences[SquigglySliderKey] ?: false,
             hapticsEnabled = preferences[EnableHapticsKey] ?: false,
             clickHapticsEnabled = preferences[EnableClickHapticsKey] ?: true,
           )

@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -55,7 +56,10 @@ import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
 import echo.music.iad1tya.constants.SwipeSensitivityKey
 import echo.music.iad1tya.constants.SwipeThumbnailKey
+import echo.music.iad1tya.constants.MiniPlayerControlsMode
+import echo.music.iad1tya.constants.MiniPlayerControlsModeKey
 import echo.music.iad1tya.extensions.togglePlayPause
+import echo.music.iad1tya.utils.rememberEnumPreference
 import echo.music.iad1tya.utils.rememberPreference
 import kotlin.math.abs
 import kotlin.math.exp
@@ -83,9 +87,13 @@ fun FloatingMiniPlayer(
 
   val swipeSensitivity by rememberPreference(SwipeSensitivityKey, 0.73f)
   val swipeThumbnailPref by rememberPreference(SwipeThumbnailKey, true)
+  val controlsMode by
+    rememberEnumPreference(MiniPlayerControlsModeKey, MiniPlayerControlsMode.BUTTONS)
   val listenTogetherManager = LocalListenTogetherManager.current
   val isListenTogetherGuest = listenTogetherManager?.let { it.isInRoom && !it.isHost } ?: false
   val swipeEnabled = swipeThumbnailPref && !isListenTogetherGuest
+  val gesturesMode =
+    controlsMode == MiniPlayerControlsMode.GESTURES && swipeEnabled
 
   val layoutDirection = LocalLayoutDirection.current
   val coroutineScope = rememberCoroutineScope()
@@ -218,10 +226,31 @@ fun FloatingMiniPlayer(
       modifier =
         Modifier.fillMaxWidth()
           .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) }
-          .clickable(
-            interactionSource = pressInteractionSource,
-            indication = null,
-            onClick = onClick,
+          .then(
+            if (gesturesMode) {
+              Modifier.combinedClickable(
+                interactionSource = pressInteractionSource,
+                indication = null,
+                onClick = onClick,
+                onDoubleClick = {
+                  if (!isListenTogetherGuest) playerConnection.player.togglePlayPause()
+                },
+              ).miniPlayerGestureSemantics(
+                enabled = true,
+                isGuest = isListenTogetherGuest,
+                onPrevious = { playerConnection.player.seekToPreviousMediaItem() },
+                onPlayPause = {
+                  if (!isListenTogetherGuest) playerConnection.player.togglePlayPause()
+                },
+                onNext = { playerConnection.player.seekToNext() },
+              )
+            } else {
+              Modifier.clickable(
+                interactionSource = pressInteractionSource,
+                indication = null,
+                onClick = onClick,
+              )
+            }
           )
           .padding(
             horizontal = if (isInline) 8.dp else 12.dp,
@@ -276,18 +305,20 @@ fun FloatingMiniPlayer(
         }
       }
 
-      IconButton(
-        onClick = { playerConnection.player.togglePlayPause() },
-        modifier = Modifier.size(controlSize),
-      ) {
-        Icon(
-          painter = painterResource(if (isPlaying) R.drawable.pause else R.drawable.play),
-          contentDescription = null,
-          tint = effectiveContentColor,
-        )
+      if (!gesturesMode) {
+        IconButton(
+          onClick = { playerConnection.player.togglePlayPause() },
+          modifier = Modifier.size(controlSize),
+        ) {
+          Icon(
+            painter = painterResource(if (isPlaying) R.drawable.pause else R.drawable.play),
+            contentDescription = null,
+            tint = effectiveContentColor,
+          )
+        }
       }
 
-      if (!isInline) {
+      if (!isInline && !gesturesMode) {
         IconButton(
           onClick = { playerConnection.player.seekToNext() },
           modifier = Modifier.size(controlSize),

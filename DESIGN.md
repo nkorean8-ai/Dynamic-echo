@@ -92,8 +92,9 @@ Before adding a brand new UI component, always check `ui/component/` to see if a
 The optional now-playing overlay uses a black, monochrome pill near the display
 cutout rather than a stock Material container. Album art is the only image accent;
 metadata is white/gray and playback activity is represented by narrow animated bars.
-The bars animate only during playback and remain static while paused. Expanded controls
-use flat text glyphs and a custom progress line. Optional backgrounds can use a restrained
+The bars animate only during playback and remain static while paused. The expanded panel
+uses flat metadata and a seek slider; horizontal swipes change tracks and an upward swipe
+collapses it. Optional backgrounds can use a restrained
 palette extracted from the current artwork, applied to the collapsed pill, expanded panel,
 or both; the default remains near-black. The service-hosted Compose tree has no app
 backdrop, so its Liquid Glass option is a dark artwork-tinted treatment rather than a
@@ -101,11 +102,16 @@ behind-window blur.
 Palette-derived gradients are drawn only when extraction yields at least two distinct
 swatches; otherwise the background remains a safe solid near-black, so optional styles
 remain crash-safe for every cover.
+The background, waveform, and seek-slider visuals are provided by the app's existing
+mini-player renderers through an interface in `:island`, keeping playback and styling
+consistent without introducing an app-module dependency in the overlay module. Appearance
+settings expose the optional overlay, track-change expansion, paused auto-hide, swipe
+direction, foreground visibility, calibration, size, background, and seek-slider choices.
 
 The overlay must respect display-cutout/status-bar insets, disappear while Echo Music is
 foreground, and use only upward swipe to collapse from the expanded panel. A compact tap
 expands the panel; it must not open the app or depend on long press. Expanded artwork,
-empty area, controls, and seek dragging remain inside the panel and outside taps collapse
+empty area, and seek dragging remain inside the panel and outside taps collapse
 it. The content morphs with a spring inside a correctly sized overlay window: enlarge the
 window before expanding and keep it expanded until the collapse morph completes. The
 3/5/8/10-second or Off expanded-panel timeout is reset by actual panel touches, never by
@@ -114,6 +120,12 @@ a separate configurable auto-hide, defaulting to 60 seconds on fresh installs. D
 Compose content when the overlay window detaches, and remove WindowManager-registered views
 even if their first attach callback has not run yet; the service-owned lifecycle must remain
 alive until the view is no longer registered.
+The compact pill uses a single 300ms tap-count detector: single tap expands, double tap
+toggles playback, and triple tap opens the app. Right/left swipes change to next/previous by
+default and can be inverted independently of mini-player gestures; double-tap in the
+expanded panel also toggles playback. The shared mini-player
+control-mode setting defaults to buttons; gesture mode hides playback buttons and uses
+horizontal swipes for track changes, double-tap for play/pause, and TalkBack custom actions.
 
 
 ## Music Flow

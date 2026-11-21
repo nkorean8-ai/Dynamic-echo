@@ -6,8 +6,9 @@
     "Music Flow: optional full-screen vertical swipe discovery (Home shortcut) that plays personalized songs through the existing player, with like/playlist/share/lyrics actions, Not interested / Less like this feedback, Restore previous queue, offline downloaded-song fallback and settings under Settings → Music Flow",
     "Android Auto: optional autoplay of the restored queue on automotive connect (Settings → Player, default off) and Home browse node with YouTube Home sections, suggested and recent content alongside local library",
     "Library UI: separate the Library overview into swipeable In App Library and Spotify underlined source tabs with separate sort controls, circular horizontal playlist preview, adaptive grid and inline track search for Spotify playlists, and animated refresh sync status messages (#808)",
-    "Dynamic Island: optional overlay-service-hosted monochrome now-playing pill with cutout-aware positioning, track-change expansion, playback controls, idle timeout, and explicit overlay permission fallback",
-    "Dynamic Island interactions and appearance: compact-pill tap expansion, touch-safe panel controls and seeking, outside-tap/up-swipe collapse, spring-morphed window sizing, 3/5/8/10-second or Off timeout, playback-aware waveform, and optional artwork-palette backgrounds"
+    "Dynamic Island: optional overlay-service-hosted monochrome now-playing pill with cutout-aware positioning, track-change expansion, playback gestures, idle timeout, and explicit overlay permission flow",
+    "Dynamic Island interactions and appearance: compact-pill tap expansion, swipe-based track changes, seek slider, outside-tap/up-swipe collapse, spring-morphed window sizing, 3/5/8/10-second or Off timeout, cutout calibration, app-renderer reuse, and optional artwork-palette backgrounds",
+    "Mini-player controls: choose button controls or gesture mode across the standard, legacy, and floating mini-players, with TalkBack actions"
   ],
   "bug_fixes": [
     "Stats: fix NullPointerException crash when opening Stats by making SongWithStats thumbnailUrl and play counts safely nullable, removing unsafe forced unwraps, and guarding date sequence boundaries (#646)",

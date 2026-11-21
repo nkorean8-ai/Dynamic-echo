@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -83,8 +85,19 @@ import echo.music.iad1tya.constants.IslandBackgroundStyleKey
 import echo.music.iad1tya.constants.IslandBackgroundTarget
 import echo.music.iad1tya.constants.IslandBackgroundTargetKey
 import echo.music.iad1tya.constants.IslandFollowMiniPlayerStyleKey
+import echo.music.iad1tya.constants.IslandAutoHideSecondsKey
+import echo.music.iad1tya.constants.IslandCompactHeightKey
+import echo.music.iad1tya.constants.IslandCompactWidthKey
+import echo.music.iad1tya.constants.IslandEnabledKey
+import echo.music.iad1tya.constants.IslandFollowPlayerSliderStyleKey
+import echo.music.iad1tya.constants.IslandHideInForegroundKey
+import echo.music.iad1tya.constants.IslandHorizontalOffsetKey
 import echo.music.iad1tya.constants.IslandInactivitySecondsKey
+import echo.music.iad1tya.constants.IslandInvertSwipesKey
+import echo.music.iad1tya.constants.IslandShowTrackChangeKey
 import echo.music.iad1tya.constants.IslandSingleTapExpandKey
+import echo.music.iad1tya.constants.IslandSliderStyleKey
+import echo.music.iad1tya.constants.IslandVerticalCalibrationKey
 import echo.music.iad1tya.constants.LibraryFilter
 import echo.music.iad1tya.constants.ListenTogetherInTopBarKey
 import echo.music.iad1tya.constants.LyricsAnimationStyle
@@ -97,6 +110,8 @@ import echo.music.iad1tya.constants.LyricsStandardBlurKey
 import echo.music.iad1tya.constants.LyricsTextPositionKey
 import echo.music.iad1tya.constants.LyricsTextSizeKey
 import echo.music.iad1tya.constants.MiniPlayerBackgroundStyleKey
+import echo.music.iad1tya.constants.MiniPlayerControlsMode
+import echo.music.iad1tya.constants.MiniPlayerControlsModeKey
 import echo.music.iad1tya.constants.PlayerBackgroundStyle
 import echo.music.iad1tya.constants.PlayerBackgroundStyleKey
 import echo.music.iad1tya.constants.PlayerButtonsStyle
@@ -128,6 +143,7 @@ import echo.music.iad1tya.ui.component.IconButton
 import echo.music.iad1tya.ui.component.Material3SettingsGroup
 import echo.music.iad1tya.ui.component.Material3SettingsItem
 import echo.music.iad1tya.ui.component.MiniPlayerBackgroundStyleModal
+import echo.music.iad1tya.ui.component.IslandCalibrationPreview
 import echo.music.iad1tya.ui.component.playerBackgroundStyleLabel
 import echo.music.iad1tya.ui.component.PlayerBackgroundStyleModal
 import echo.music.iad1tya.ui.component.PlayerButtonsStyleModal
@@ -245,10 +261,34 @@ fun AppearanceSettings(
       MiniPlayerBackgroundStyleKey,
       defaultValue = PlayerBackgroundStyle.DEFAULT,
     )
+  val (miniPlayerControlsMode, onMiniPlayerControlsModeChange) =
+    rememberEnumPreference(MiniPlayerControlsModeKey, MiniPlayerControlsMode.BUTTONS)
+  val (islandEnabled, onIslandEnabledChange) =
+    rememberPreference(IslandEnabledKey, defaultValue = false)
+  val (islandAutoHideSeconds, onIslandAutoHideSecondsChange) =
+    rememberPreference(IslandAutoHideSecondsKey, defaultValue = 60)
+  val (islandShowTrackChange, onIslandShowTrackChange) =
+    rememberPreference(IslandShowTrackChangeKey, defaultValue = true)
   val (islandSingleTapExpand, onIslandSingleTapExpandChange) =
     rememberPreference(IslandSingleTapExpandKey, defaultValue = true)
   val (islandInactivitySeconds, onIslandInactivitySecondsChange) =
     rememberPreference(IslandInactivitySecondsKey, defaultValue = 5)
+  val (islandInvertSwipes, onIslandInvertSwipesChange) =
+    rememberPreference(IslandInvertSwipesKey, defaultValue = false)
+  val (islandHideInForeground, onIslandHideInForegroundChange) =
+    rememberPreference(IslandHideInForegroundKey, defaultValue = true)
+  val (islandVerticalCalibration, onIslandVerticalCalibrationChange) =
+    rememberPreference(IslandVerticalCalibrationKey, defaultValue = 0)
+  val (islandHorizontalOffset, onIslandHorizontalOffsetChange) =
+    rememberPreference(IslandHorizontalOffsetKey, defaultValue = 0)
+  val (islandCompactWidth, onIslandCompactWidthChange) =
+    rememberPreference(IslandCompactWidthKey, defaultValue = 140)
+  val (islandCompactHeight, onIslandCompactHeightChange) =
+    rememberPreference(IslandCompactHeightKey, defaultValue = 32)
+  val (islandSliderStyle, onIslandSliderStyleChange) =
+    rememberEnumPreference(IslandSliderStyleKey, SliderStyle.DEFAULT)
+  val (islandFollowPlayerSliderStyle, onIslandFollowPlayerSliderStyleChange) =
+    rememberPreference(IslandFollowPlayerSliderStyleKey, defaultValue = false)
   val (islandBackgroundStyle, onIslandBackgroundStyleChange) =
     rememberEnumPreference(IslandBackgroundStyleKey, defaultValue = PlayerBackgroundStyle.DEFAULT)
   val (islandFollowMiniPlayerStyle, onIslandFollowMiniPlayerStyleChange) =
@@ -307,6 +347,22 @@ fun AppearanceSettings(
   var showThumbnailCornerRadiusDialog by rememberSaveable { mutableStateOf(false) }
 
   val context = activity as Context
+  val overlayPermissionLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+      onIslandEnabledChange(android.provider.Settings.canDrawOverlays(context))
+    }
+  val requestIslandEnabled: (Boolean) -> Unit = { enabled ->
+    if (!enabled || android.provider.Settings.canDrawOverlays(context)) {
+      onIslandEnabledChange(enabled)
+    } else {
+      overlayPermissionLauncher.launch(
+        Intent(
+          android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+          android.net.Uri.parse("package:${context.packageName}"),
+        )
+      )
+    }
+  }
   val sharedPreferences = remember {
     context.getSharedPreferences("echomusic_settings", Context.MODE_PRIVATE)
   }
@@ -368,10 +424,9 @@ fun AppearanceSettings(
   var showMiniPlayerBackgroundDialog by rememberSaveable { mutableStateOf(false) }
 
   var showIslandBackgroundDialog by rememberSaveable { mutableStateOf(false) }
-
   var showIslandBackgroundTargetDialog by rememberSaveable { mutableStateOf(false) }
-
   var showIslandInactivityDialog by rememberSaveable { mutableStateOf(false) }
+  var showIslandSliderStyleDialog by rememberSaveable { mutableStateOf(false) }
 
   var showPlayerButtonsStyleDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -632,6 +687,28 @@ fun AppearanceSettings(
       valueText = {
         if (it == 0) stringResource(R.string.off)
         else stringResource(R.string.island_inactivity_timeout_value, it)
+      },
+    )
+  }
+
+  if (showIslandSliderStyleDialog) {
+    EnumDialog(
+      onDismiss = { showIslandSliderStyleDialog = false },
+      onSelect = {
+        onIslandSliderStyleChange(it)
+        showIslandSliderStyleDialog = false
+      },
+      title = stringResource(R.string.island_slider_style),
+      current = islandSliderStyle,
+      values = SliderStyle.entries,
+      valueText = {
+        stringResource(
+          when (it) {
+            SliderStyle.DEFAULT -> R.string.island_slider_style_default
+            SliderStyle.WAVY -> R.string.wavy
+            SliderStyle.SLIM -> R.string.slim
+          }
+        )
       },
     )
   }
@@ -1296,6 +1373,60 @@ fun AppearanceSettings(
               onClick = { showMiniPlayerBackgroundDialog = true },
             )
           )
+          add(
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.mini_player_controls_mode)),
+              icon = painterResource(R.drawable.graphic_eq),
+              title = { Text(stringResource(R.string.mini_player_controls_mode)) },
+              description = {
+                Text(
+                  when {
+                    !swipeThumbnail -> stringResource(R.string.mini_player_controls_need_swipe)
+                    miniPlayerControlsMode == MiniPlayerControlsMode.GESTURES ->
+                      stringResource(R.string.mini_player_controls_gestures_desc)
+                    else -> stringResource(R.string.mini_player_controls_buttons_desc)
+                  }
+                )
+              },
+              trailingContent = {
+                Switch(
+                  checked = miniPlayerControlsMode == MiniPlayerControlsMode.GESTURES,
+                  enabled = swipeThumbnail,
+                  onCheckedChange = {
+                    if (swipeThumbnail) {
+                      onMiniPlayerControlsModeChange(
+                        if (it) MiniPlayerControlsMode.GESTURES
+                        else MiniPlayerControlsMode.BUTTONS
+                      )
+                    }
+                  },
+                  thumbContent = {
+                    Icon(
+                      painter =
+                        painterResource(
+                          id =
+                            if (miniPlayerControlsMode == MiniPlayerControlsMode.GESTURES)
+                              R.drawable.check
+                            else R.drawable.close
+                        ),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                  },
+                )
+              },
+              enabled = swipeThumbnail,
+              onClick = {
+                if (swipeThumbnail) {
+                  onMiniPlayerControlsModeChange(
+                    if (miniPlayerControlsMode == MiniPlayerControlsMode.GESTURES)
+                      MiniPlayerControlsMode.BUTTONS
+                    else MiniPlayerControlsMode.GESTURES
+                  )
+                }
+              },
+            )
+          )
         },
     )
 
@@ -1411,6 +1542,248 @@ fun AppearanceSettings(
                 )
               },
               onClick = { showIslandBackgroundTargetDialog = true },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_enable)),
+              icon = painterResource(R.drawable.graphic_eq),
+              title = { Text(stringResource(R.string.island_enable)) },
+              description = { Text(stringResource(R.string.island_enable_desc)) },
+              trailingContent = {
+                Switch(
+                  checked = islandEnabled,
+                  onCheckedChange = requestIslandEnabled,
+                  thumbContent = {
+                    Icon(
+                      painter =
+                        painterResource(
+                          if (islandEnabled) R.drawable.check else R.drawable.close
+                        ),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                  },
+                )
+              },
+              onClick = { requestIslandEnabled(!islandEnabled) },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_auto_hide)),
+              icon = painterResource(R.drawable.timer),
+              title = { Text(stringResource(R.string.island_auto_hide)) },
+              description = {
+                Text(stringResource(R.string.island_auto_hide_value, islandAutoHideSeconds))
+              },
+              onClick = {
+                onIslandAutoHideSecondsChange(
+                  when (islandAutoHideSeconds) {
+                    15 -> 30
+                    30 -> 60
+                    else -> 15
+                  }
+                )
+              },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_show_track_change)),
+              icon = painterResource(R.drawable.queue_music),
+              title = { Text(stringResource(R.string.island_show_track_change)) },
+              description = { Text(stringResource(R.string.island_show_track_change_desc)) },
+              trailingContent = {
+                Switch(
+                  checked = islandShowTrackChange,
+                  onCheckedChange = onIslandShowTrackChange,
+                  thumbContent = {
+                    Icon(
+                      painter =
+                        painterResource(
+                          if (islandShowTrackChange) R.drawable.check else R.drawable.close
+                        ),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                  },
+                )
+              },
+              onClick = { onIslandShowTrackChange(!islandShowTrackChange) },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_hide_in_foreground)),
+              icon = painterResource(R.drawable.graphic_eq),
+              title = { Text(stringResource(R.string.island_hide_in_foreground)) },
+              description = { Text(stringResource(R.string.island_hide_in_foreground_desc)) },
+              trailingContent = {
+                Switch(
+                  checked = islandHideInForeground,
+                  onCheckedChange = onIslandHideInForegroundChange,
+                  thumbContent = {
+                    Icon(
+                      painter =
+                        painterResource(
+                          if (islandHideInForeground) R.drawable.check else R.drawable.close
+                        ),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                  },
+                )
+              },
+              onClick = { onIslandHideInForegroundChange(!islandHideInForeground) },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_invert_swipes)),
+              icon = painterResource(R.drawable.swipe),
+              title = { Text(stringResource(R.string.island_invert_swipes)) },
+              description = { Text(stringResource(R.string.island_invert_swipes_desc)) },
+              trailingContent = {
+                Switch(
+                  checked = islandInvertSwipes,
+                  onCheckedChange = onIslandInvertSwipesChange,
+                  thumbContent = {
+                    Icon(
+                      painter =
+                        painterResource(
+                          if (islandInvertSwipes) R.drawable.check else R.drawable.close
+                        ),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                  },
+                )
+              },
+              onClick = { onIslandInvertSwipesChange(!islandInvertSwipes) },
+            ),
+            Material3SettingsItem(
+              isHighlighted =
+                (highlightKey == stringResource(R.string.island_vertical_calibration)),
+              icon = painterResource(R.drawable.graphic_eq),
+              title = { Text(stringResource(R.string.island_vertical_calibration)) },
+              description = {
+                Column {
+                  Text(
+                    stringResource(
+                      R.string.island_vertical_calibration_value,
+                      islandVerticalCalibration,
+                    )
+                  )
+                  IslandCalibrationPreview(
+                    verticalOffsetDp = islandVerticalCalibration,
+                    horizontalOffsetDp = islandHorizontalOffset,
+                    compactWidthDp = islandCompactWidth,
+                    compactHeightDp = islandCompactHeight,
+                    modifier = Modifier.padding(top = 8.dp),
+                  )
+                }
+              },
+              trailingContent = {
+                Slider(
+                  value = islandVerticalCalibration.toFloat(),
+                  onValueChange = { onIslandVerticalCalibrationChange(it.roundToInt()) },
+                  valueRange = -60f..60f,
+                  modifier = Modifier.size(width = 128.dp, height = 40.dp),
+                )
+              },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_horizontal_offset)),
+              icon = painterResource(R.drawable.graphic_eq),
+              title = { Text(stringResource(R.string.island_horizontal_offset)) },
+              description = {
+                Text(
+                  stringResource(
+                    R.string.island_horizontal_offset_value,
+                    islandHorizontalOffset,
+                  )
+                )
+              },
+              trailingContent = {
+                Slider(
+                  value = islandHorizontalOffset.toFloat(),
+                  onValueChange = { onIslandHorizontalOffsetChange(it.roundToInt()) },
+                  valueRange = -60f..60f,
+                  modifier = Modifier.size(width = 128.dp, height = 40.dp),
+                )
+              },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_compact_width)),
+              icon = painterResource(R.drawable.graphic_eq),
+              title = { Text(stringResource(R.string.island_compact_width)) },
+              description = {
+                Text(stringResource(R.string.island_compact_width_value, islandCompactWidth))
+              },
+              trailingContent = {
+                Slider(
+                  value = islandCompactWidth.toFloat(),
+                  onValueChange = { onIslandCompactWidthChange(it.roundToInt()) },
+                  valueRange = 120f..180f,
+                  modifier = Modifier.size(width = 128.dp, height = 40.dp),
+                )
+              },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_compact_height)),
+              icon = painterResource(R.drawable.graphic_eq),
+              title = { Text(stringResource(R.string.island_compact_height)) },
+              description = {
+                Text(stringResource(R.string.island_compact_height_value, islandCompactHeight))
+              },
+              trailingContent = {
+                Slider(
+                  value = islandCompactHeight.toFloat(),
+                  onValueChange = { onIslandCompactHeightChange(it.roundToInt()) },
+                  valueRange = 28f..44f,
+                  modifier = Modifier.size(width = 128.dp, height = 40.dp),
+                )
+              },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_slider_style)),
+              icon = painterResource(R.drawable.graphic_eq),
+              title = { Text(stringResource(R.string.island_slider_style)) },
+              description = {
+                Text(
+                  if (islandFollowPlayerSliderStyle) {
+                    stringResource(R.string.island_follow_player_slider_style_desc)
+                  } else {
+                    stringResource(
+                      when (islandSliderStyle) {
+                        SliderStyle.DEFAULT -> R.string.island_slider_style_default
+                        SliderStyle.WAVY -> R.string.wavy
+                        SliderStyle.SLIM -> R.string.slim
+                      }
+                    )
+                  }
+                )
+              },
+              onClick = { showIslandSliderStyleDialog = true },
+            ),
+            Material3SettingsItem(
+              isHighlighted =
+                (highlightKey == stringResource(R.string.island_follow_player_slider_style)),
+              icon = painterResource(R.drawable.graphic_eq),
+              title = { Text(stringResource(R.string.island_follow_player_slider_style)) },
+              description = {
+                Text(stringResource(R.string.island_follow_player_slider_style_desc))
+              },
+              trailingContent = {
+                Switch(
+                  checked = islandFollowPlayerSliderStyle,
+                  onCheckedChange = onIslandFollowPlayerSliderStyleChange,
+                  thumbContent = {
+                    Icon(
+                      painter =
+                        painterResource(
+                          if (islandFollowPlayerSliderStyle) R.drawable.check else R.drawable.close
+                        ),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                  },
+                )
+              },
+              onClick = {
+                onIslandFollowPlayerSliderStyleChange(!islandFollowPlayerSliderStyle)
+              },
             )
           ),
     )

@@ -33,7 +33,7 @@ android {
     applicationId = "echo.music.iad1tya"
     minSdk = 26
     targetSdk = 36
-    versionCode = 176
+    versionCode = 177
     versionName = "1.4.8"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
