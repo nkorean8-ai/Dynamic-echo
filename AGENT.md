@@ -396,6 +396,9 @@ suppresses timeout while dragging and restarts it on drag end. The overlay uses
 spring morph to finish before restoring compact window dimensions. `LIQUID_GLASS` in this
 service uses a dark, artwork-tinted surface because the service Compose tree has no app
 backdrop to sample.
+The root touch listener handles `ACTION_OUTSIDE` but forwards normal inside-window events
+to Compose after observing compact-pill gestures. Palette-derived gradients must have at
+least two colors even when artwork extraction returns a single swatch.
 
 ## Library UI Separation
 

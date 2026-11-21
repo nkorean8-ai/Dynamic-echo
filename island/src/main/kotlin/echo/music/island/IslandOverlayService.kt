@@ -322,17 +322,19 @@ class IslandOverlayService : Service() {
         }
         setOnTouchListener { _, event ->
           if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
+            Log.d(TAG, "Overlay received ACTION_OUTSIDE in phase=$phase")
             if (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) {
               beginCollapse()
             }
             true
           } else if (phase == IslandPhase.COLLAPSED || compactGestureActive) {
             handleCompactGesture(event)
-            true
+            false
           } else {
             false
           }
         }
+        isClickable = true
         ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
           updateOverlayPosition(insets)
           insets
@@ -369,6 +371,19 @@ class IslandOverlayService : Service() {
     try {
       manager.addView(view, params)
       overlayViewAdded = true
+      Log.d(
+        TAG,
+        "Overlay added: type=${params.type}, flags=0x${params.flags.toString(16)}, " +
+          "size=${params.width}x${params.height}, position=(${params.x},${params.y})",
+      )
+      view.post {
+        if (overlayView === view) {
+          Log.d(
+            TAG,
+            "Overlay root attached=${view.isAttachedToWindow}, bounds=${view.width}x${view.height}",
+          )
+        }
+      }
       if (view.isAttachedToWindow) ViewCompat.requestApplyInsets(view)
     } catch (error: WindowManager.BadTokenException) {
       Log.e(TAG, "Unable to attach the island overlay window", error)
@@ -662,6 +677,11 @@ class IslandOverlayService : Service() {
   private fun handleCompactGesture(event: MotionEvent) {
     when (event.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
+        Log.d(
+          TAG,
+          "Compact touch DOWN: (${event.x},${event.y}), " +
+            "bounds=${overlayView?.width}x${overlayView?.height}, phase=$phase",
+        )
         if (phase != IslandPhase.COLLAPSED || event.pointerCount != 1) {
           cancelCompactTapSequence()
           resetCompactGesture()
@@ -715,11 +735,22 @@ class IslandOverlayService : Service() {
             kotlin.math.abs(deltaX) > kotlin.math.abs(deltaY) * SWIPE_AXIS_RATIO
         ) {
           compactGestureHandled = true
-          if (deltaX > 0f) controller.next() else controller.previous()
+          if (deltaX > 0f) {
+            Log.d(TAG, "Compact horizontal swipe -> next")
+            controller.next()
+          } else {
+            Log.d(TAG, "Compact horizontal swipe -> previous")
+            controller.previous()
+          }
         }
       }
 
       MotionEvent.ACTION_UP -> {
+        Log.d(
+          TAG,
+          "Compact touch UP: moved=$compactGestureMoved, handled=$compactGestureHandled, " +
+            "elapsed=${event.eventTime - compactGestureDownTime}ms",
+        )
         if (compactGestureActive &&
           !compactGestureMoved &&
           !compactGestureHandled &&
@@ -749,6 +780,7 @@ class IslandOverlayService : Service() {
     compactLastTapUpTime = eventTime
     if (compactTapCount == 3) {
       cancelCompactTapSequence()
+      Log.d(TAG, "Compact triple tap -> open app")
       performTapHaptic(tripleTap = true)
       controller.openApp()
       return
@@ -765,8 +797,12 @@ class IslandOverlayService : Service() {
     val tapCount = compactTapCount
     cancelCompactTapSequence()
     when (tapCount) {
-      1 -> if (controller.settings.value.singleTapExpand) beginExpand(trackChange = false)
+      1 -> if (controller.settings.value.singleTapExpand) {
+        Log.d(TAG, "Compact single tap -> expand")
+        beginExpand(trackChange = false)
+      }
       2 -> {
+        Log.d(TAG, "Compact double tap -> play/pause")
         performTapHaptic(tripleTap = false)
         controller.playPause()
       }
@@ -1326,7 +1362,12 @@ private fun IslandBackgroundLayer(
 ) {
   val shape = RoundedCornerShape(cornerRadius)
   val fallbackColors = listOf(Color(0xFF30202A), Color(0xFF171217), Color(0xFF090909))
-  val colors = paletteColors.ifEmpty { fallbackColors }
+  val colors =
+    when {
+      paletteColors.size >= 2 -> paletteColors
+      paletteColors.size == 1 -> paletteColors + fallbackColors.drop(1)
+      else -> fallbackColors
+    }
   val borderModifier =
     if (style == "LIQUID_GLASS") {
       Modifier.border(1.dp, Color.White.copy(alpha = if (isCollapsed) 0.12f else 0.2f), shape)

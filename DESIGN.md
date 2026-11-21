@@ -98,6 +98,8 @@ palette extracted from the current artwork, applied to the collapsed pill, expan
 or both; the default remains near-black. The service-hosted Compose tree has no app
 backdrop, so its Liquid Glass option is a dark artwork-tinted treatment rather than a
 behind-window blur.
+Palette-derived gradients must retain at least two colors when artwork extraction yields
+only one swatch, so optional backgrounds remain crash-safe for every cover.
 
 The overlay must respect display-cutout/status-bar insets, disappear while Echo Music is
 foreground, and use only upward swipe to collapse from the expanded panel. A compact tap
