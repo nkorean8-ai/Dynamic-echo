@@ -92,11 +92,21 @@ Before adding a brand new UI component, always check `ui/component/` to see if a
 The optional now-playing overlay uses a black, monochrome pill near the display
 cutout rather than a stock Material container. Album art is the only image accent;
 metadata is white/gray and playback activity is represented by narrow animated bars.
-Expanded controls use flat text glyphs and a custom progress line. The overlay must
-respect display-cutout/status-bar insets, disappear while Echo Music is foreground,
-and use only upward swipe to collapse from the expanded panel. A compact tap expands
-the panel; it must not open the app or depend on long press. Expanded artwork, empty
-area, controls, and seek dragging remain inside the panel and outside taps collapse it.
+The bars animate only during playback and remain static while paused. Expanded controls
+use flat text glyphs and a custom progress line. Optional backgrounds can use a restrained
+palette extracted from the current artwork, applied to the collapsed pill, expanded panel,
+or both; the default remains near-black. The service-hosted Compose tree has no app
+backdrop, so its Liquid Glass option is a dark artwork-tinted treatment rather than a
+behind-window blur.
+
+The overlay must respect display-cutout/status-bar insets, disappear while Echo Music is
+foreground, and use only upward swipe to collapse from the expanded panel. A compact tap
+expands the panel; it must not open the app or depend on long press. Expanded artwork,
+empty area, controls, and seek dragging remain inside the panel and outside taps collapse
+it. The content morphs with a spring inside a correctly sized overlay window: enlarge the
+window before expanding and keep it expanded until the collapse morph completes. The
+3/5/8/10-second or Off timeout is reset by actual panel touches, never by playback or
+metadata updates; a seek drag suppresses it until release.
 
 
 ## Music Flow

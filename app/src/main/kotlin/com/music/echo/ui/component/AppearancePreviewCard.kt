@@ -1131,6 +1131,7 @@ fun MiniPlayerBackgroundStyleModal(
   availableStyles: List<PlayerBackgroundStyle>,
   onSelect: (PlayerBackgroundStyle) -> Unit,
   onDismiss: () -> Unit,
+  titleRes: Int = R.string.miniplayer_background_style,
 ) {
   val listState = rememberLazyListState()
   val canScrollUp = listState.canScrollBackward
@@ -1153,7 +1154,7 @@ fun MiniPlayerBackgroundStyleModal(
     title = {
       Column {
         Text(
-          text = stringResource(R.string.miniplayer_background_style),
+          text = stringResource(titleRes),
           style = MaterialTheme.typography.headlineSmall,
           fontWeight = FontWeight.Bold,
         )

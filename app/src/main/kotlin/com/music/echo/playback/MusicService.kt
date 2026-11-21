@@ -126,10 +126,19 @@ import echo.music.iad1tya.constants.SkipSilenceInstantKey
 import echo.music.iad1tya.constants.SkipSilenceKey
 import echo.music.iad1tya.constants.SpatialAudioKey
 import echo.music.iad1tya.constants.IslandAutoHideSecondsKey
+import echo.music.iad1tya.constants.IslandBackgroundStyleKey
+import echo.music.iad1tya.constants.IslandBackgroundTarget
+import echo.music.iad1tya.constants.IslandBackgroundTargetKey
 import echo.music.iad1tya.constants.IslandInactivitySecondsKey
 import echo.music.iad1tya.constants.IslandEnabledKey
+import echo.music.iad1tya.constants.IslandFollowMiniPlayerStyleKey
+import echo.music.iad1tya.constants.IslandSingleTapExpandKey
 import echo.music.iad1tya.constants.IslandShowTrackChangeKey
 import echo.music.iad1tya.constants.IslandVerticalOffsetKey
+import echo.music.iad1tya.constants.MiniPlayerBackgroundStyleKey
+import echo.music.iad1tya.constants.PlayerBackgroundStyle
+import echo.music.iad1tya.constants.EnableHapticsKey
+import echo.music.iad1tya.constants.EnableClickHapticsKey
 import echo.music.iad1tya.db.MusicDatabase
 import echo.music.iad1tya.db.entities.BeatInfoEntity
 import echo.music.iad1tya.db.entities.Event
@@ -902,10 +911,20 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         .map { preferences ->
           IslandSettings(
             enabled = preferences[IslandEnabledKey] ?: false,
+            singleTapExpand = preferences[IslandSingleTapExpandKey] ?: true,
             autoHideSeconds = preferences[IslandAutoHideSecondsKey] ?: 30,
             inactivitySeconds = preferences[IslandInactivitySecondsKey] ?: 5,
             showTrackChange = preferences[IslandShowTrackChangeKey] ?: true,
             verticalOffsetDp = preferences[IslandVerticalOffsetKey] ?: 0,
+            backgroundStyle =
+              preferences[IslandBackgroundStyleKey] ?: PlayerBackgroundStyle.DEFAULT.name,
+            followMiniPlayerStyle = preferences[IslandFollowMiniPlayerStyleKey] ?: false,
+            miniPlayerBackgroundStyle =
+              preferences[MiniPlayerBackgroundStyleKey] ?: PlayerBackgroundStyle.DEFAULT.name,
+            backgroundTarget =
+              preferences[IslandBackgroundTargetKey] ?: IslandBackgroundTarget.EXPANDED.name,
+            hapticsEnabled = preferences[EnableHapticsKey] ?: false,
+            clickHapticsEnabled = preferences[EnableClickHapticsKey] ?: true,
           )
         }
         .distinctUntilChanged()

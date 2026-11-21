@@ -42,4 +42,5 @@ dependencies {
   implementation(libs.timber)
   implementation(libs.coil)
   implementation(libs.coil.network.okhttp)
+  implementation(libs.palette)
 }

@@ -379,15 +379,21 @@ ViewModel-store owners, positions itself from status-bar/display-cutout insets, 
 removes itself while the app process is foregrounded. Overlay permission denial stops
 the service and leaves normal media playback/notification behavior unchanged.
 
-The overlay is intentionally monochrome: a black rounded pill, white metadata, animated
-bars, and a custom progress line. Preferences are `Island*Key` values in
-`core/.../PreferenceKeys.kt`; the settings UI must keep the permission request explicit
-and explain the `SYSTEM_ALERT_WINDOW` requirement. The collapsed pill tap expands only:
-it never opens the app or requires a long press. Expanded taps and controls reset the
-inactivity timer; playback and track updates do not. Seeking suppresses timeout while
-dragging and restarts it on drag end. The overlay uses `FLAG_WATCH_OUTSIDE_TOUCH`,
-`FLAG_NOT_TOUCH_MODAL`, and a four-state lifecycle (`Collapsed`, `Expanding`, `Expanded`,
-`Collapsing`) with compact dimensions restored after the collapse animation.
+The overlay is intentionally monochrome by default: a black rounded pill, white metadata,
+playback-aware bars (static while paused), and a custom progress line. Optional artwork-
+palette backgrounds reuse `PlayerBackgroundStyle`; their target (collapsed, expanded, or
+both) and follow-mini-player behavior are stored in `Island*Key` preferences. The service-
+hosted Compose tree must keep its own lifecycle, saved-state, and ViewModel-store owners.
+The settings UI must keep the permission request explicit and explain the
+`SYSTEM_ALERT_WINDOW` requirement. The collapsed pill tap expands only: it never opens the
+app or requires a long press. Expanded touch-downs, controls, and seek gestures reset the
+3/5/8/10-second or Off inactivity timer; playback and metadata updates do not. Seeking
+suppresses timeout while dragging and restarts it on drag end. The overlay uses
+`FLAG_WATCH_OUTSIDE_TOUCH`, `FLAG_NOT_TOUCH_MODAL`, and a four-state lifecycle (`Collapsed`,
+`Expanding`, `Expanded`, `Collapsing`); enlarge the window before expansion and wait for the
+spring morph to finish before restoring compact window dimensions. `LIQUID_GLASS` in this
+service uses a dark, artwork-tinted surface because the service Compose tree has no app
+backdrop to sample.
 
 ## Library UI Separation
 

@@ -824,10 +824,20 @@ val BassBoostKey = floatPreferencesKey("bass_boost")
 val VirtualizerKey = floatPreferencesKey("virtualizer")
 
 val IslandEnabledKey = booleanPreferencesKey("island_enabled")
+val IslandSingleTapExpandKey = booleanPreferencesKey("island_single_tap_expand")
 val IslandAutoHideSecondsKey = intPreferencesKey("island_auto_hide_seconds")
 val IslandInactivitySecondsKey = intPreferencesKey("island_inactivity_seconds")
 val IslandShowTrackChangeKey = booleanPreferencesKey("island_show_track_change")
 val IslandVerticalOffsetKey = intPreferencesKey("island_vertical_offset")
+enum class IslandBackgroundTarget {
+  COLLAPSED,
+  EXPANDED,
+  BOTH,
+}
+
+val IslandBackgroundStyleKey = stringPreferencesKey("island_background_style")
+val IslandFollowMiniPlayerStyleKey = booleanPreferencesKey("island_follow_miniplayer_style")
+val IslandBackgroundTargetKey = stringPreferencesKey("island_background_target")
 val ListenBrainzEnabledKey = booleanPreferencesKey("listenbrainz_enabled")
 val ListenBrainzTokenKey = stringPreferencesKey("listenbrainz_token")
 val LrcLibLyricsEnabledKey = booleanPreferencesKey("lrclib_lyrics_enabled")

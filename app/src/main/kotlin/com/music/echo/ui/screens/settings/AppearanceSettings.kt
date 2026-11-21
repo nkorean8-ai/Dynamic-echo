@@ -79,6 +79,12 @@ import echo.music.iad1tya.constants.GridItemSize
 import echo.music.iad1tya.constants.GridItemsSizeKey
 import echo.music.iad1tya.constants.HidePlayerThumbnailKey
 import echo.music.iad1tya.constants.HideStatusBarOnFullscreenKey
+import echo.music.iad1tya.constants.IslandBackgroundStyleKey
+import echo.music.iad1tya.constants.IslandBackgroundTarget
+import echo.music.iad1tya.constants.IslandBackgroundTargetKey
+import echo.music.iad1tya.constants.IslandFollowMiniPlayerStyleKey
+import echo.music.iad1tya.constants.IslandInactivitySecondsKey
+import echo.music.iad1tya.constants.IslandSingleTapExpandKey
 import echo.music.iad1tya.constants.LibraryFilter
 import echo.music.iad1tya.constants.ListenTogetherInTopBarKey
 import echo.music.iad1tya.constants.LyricsAnimationStyle
@@ -122,6 +128,7 @@ import echo.music.iad1tya.ui.component.IconButton
 import echo.music.iad1tya.ui.component.Material3SettingsGroup
 import echo.music.iad1tya.ui.component.Material3SettingsItem
 import echo.music.iad1tya.ui.component.MiniPlayerBackgroundStyleModal
+import echo.music.iad1tya.ui.component.playerBackgroundStyleLabel
 import echo.music.iad1tya.ui.component.PlayerBackgroundStyleModal
 import echo.music.iad1tya.ui.component.PlayerButtonsStyleModal
 import echo.music.iad1tya.ui.component.PlayerSliderTrack
@@ -238,6 +245,16 @@ fun AppearanceSettings(
       MiniPlayerBackgroundStyleKey,
       defaultValue = PlayerBackgroundStyle.DEFAULT,
     )
+  val (islandSingleTapExpand, onIslandSingleTapExpandChange) =
+    rememberPreference(IslandSingleTapExpandKey, defaultValue = true)
+  val (islandInactivitySeconds, onIslandInactivitySecondsChange) =
+    rememberPreference(IslandInactivitySecondsKey, defaultValue = 5)
+  val (islandBackgroundStyle, onIslandBackgroundStyleChange) =
+    rememberEnumPreference(IslandBackgroundStyleKey, defaultValue = PlayerBackgroundStyle.DEFAULT)
+  val (islandFollowMiniPlayerStyle, onIslandFollowMiniPlayerStyleChange) =
+    rememberPreference(IslandFollowMiniPlayerStyleKey, defaultValue = false)
+  val (islandBackgroundTarget, onIslandBackgroundTargetChange) =
+    rememberEnumPreference(IslandBackgroundTargetKey, defaultValue = IslandBackgroundTarget.EXPANDED)
 
   val (defaultOpenTab, onDefaultOpenTabChange) =
     rememberEnumPreference(DefaultOpenTabKey, defaultValue = NavigationTab.HOME)
@@ -338,6 +355,8 @@ fun AppearanceSettings(
   val availableMiniPlayerBackgroundStyles = availableBackgroundStyles.filter {
     it != PlayerBackgroundStyle.APPLE_MUSIC && it != PlayerBackgroundStyle.GRADIENT
   }
+  val availableIslandBackgroundStyles =
+    availableBackgroundStyles.filter { it != PlayerBackgroundStyle.APPLE_MUSIC }
 
   val (defaultChip, onDefaultChipChange) =
     rememberEnumPreference(key = ChipSortTypeKey, defaultValue = LibraryFilter.LIBRARY)
@@ -347,6 +366,12 @@ fun AppearanceSettings(
   var showPlayerBackgroundDialog by rememberSaveable { mutableStateOf(false) }
 
   var showMiniPlayerBackgroundDialog by rememberSaveable { mutableStateOf(false) }
+
+  var showIslandBackgroundDialog by rememberSaveable { mutableStateOf(false) }
+
+  var showIslandBackgroundTargetDialog by rememberSaveable { mutableStateOf(false) }
+
+  var showIslandInactivityDialog by rememberSaveable { mutableStateOf(false) }
 
   var showPlayerButtonsStyleDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -559,6 +584,55 @@ fun AppearanceSettings(
       availableStyles = availableMiniPlayerBackgroundStyles,
       onSelect = onMiniPlayerBackgroundChange,
       onDismiss = { showMiniPlayerBackgroundDialog = false },
+    )
+  }
+
+  if (showIslandBackgroundDialog) {
+    MiniPlayerBackgroundStyleModal(
+      current = islandBackgroundStyle,
+      availableStyles = availableIslandBackgroundStyles,
+      onSelect = onIslandBackgroundStyleChange,
+      onDismiss = { showIslandBackgroundDialog = false },
+      titleRes = R.string.island_background_style,
+    )
+  }
+
+  if (showIslandBackgroundTargetDialog) {
+    EnumDialog(
+      onDismiss = { showIslandBackgroundTargetDialog = false },
+      onSelect = {
+        onIslandBackgroundTargetChange(it)
+        showIslandBackgroundTargetDialog = false
+      },
+      title = stringResource(R.string.island_style_apply_to),
+      current = islandBackgroundTarget,
+      values = IslandBackgroundTarget.entries,
+      valueText = {
+        stringResource(
+          when (it) {
+            IslandBackgroundTarget.COLLAPSED -> R.string.island_style_target_collapsed
+            IslandBackgroundTarget.EXPANDED -> R.string.island_style_target_expanded
+            IslandBackgroundTarget.BOTH -> R.string.island_style_target_both
+          }
+        )
+      },
+    )
+  }
+
+  if (showIslandInactivityDialog) {
+    EnumDialog(
+      onDismiss = { showIslandInactivityDialog = false },
+      onSelect = {
+        onIslandInactivitySecondsChange(it)
+        showIslandInactivityDialog = false
+      },
+      title = stringResource(R.string.island_inactivity_timeout),
+      current = islandInactivitySeconds,
+      values = listOf(3, 5, 8, 10, 0),
+      valueText = {
+        if (it == 0) stringResource(R.string.off)
+        else stringResource(R.string.island_inactivity_timeout_value, it)
+      },
     )
   }
 
@@ -1223,6 +1297,122 @@ fun AppearanceSettings(
             )
           )
         },
+    )
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Material3SettingsGroup(
+        scrollState = scrollState,
+        title = stringResource(R.string.island_title),
+        items =
+          listOf(
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_single_tap_expand)),
+              icon = painterResource(R.drawable.swipe),
+              title = { Text(stringResource(R.string.island_single_tap_expand)) },
+              description = { Text(stringResource(R.string.island_single_tap_expand_desc)) },
+              trailingContent = {
+                Switch(
+                  checked = islandSingleTapExpand,
+                  onCheckedChange = onIslandSingleTapExpandChange,
+                  thumbContent = {
+                    Icon(
+                      painter =
+                        painterResource(
+                          id = if (islandSingleTapExpand) R.drawable.check else R.drawable.close
+                        ),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                  },
+                )
+              },
+              onClick = { onIslandSingleTapExpandChange(!islandSingleTapExpand) },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_inactivity_timeout)),
+              icon = painterResource(R.drawable.timer),
+              title = { Text(stringResource(R.string.island_inactivity_timeout)) },
+              description = {
+                Text(
+                  if (islandInactivitySeconds == 0) {
+                    stringResource(R.string.off)
+                  } else {
+                    stringResource(
+                      R.string.island_inactivity_timeout_value,
+                      islandInactivitySeconds,
+                    )
+                  }
+                )
+              },
+              onClick = { showIslandInactivityDialog = true },
+            ),
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.island_background_style)),
+              icon = painterResource(R.drawable.dock_to_top),
+              title = { Text(stringResource(R.string.island_background_style)) },
+              description = {
+                Text(
+                  if (islandBackgroundStyle == PlayerBackgroundStyle.DEFAULT) {
+                    stringResource(R.string.island_background_default)
+                  } else {
+                    playerBackgroundStyleLabel(islandBackgroundStyle)
+                  }
+                )
+              },
+              onClick = { showIslandBackgroundDialog = true },
+            ),
+            Material3SettingsItem(
+              isHighlighted =
+                (highlightKey == stringResource(R.string.island_follow_miniplayer_style)),
+              icon = painterResource(R.drawable.dock_to_top),
+              title = { Text(stringResource(R.string.island_follow_miniplayer_style)) },
+              description = {
+                Text(stringResource(R.string.island_follow_miniplayer_style_desc))
+              },
+              trailingContent = {
+                Switch(
+                  checked = islandFollowMiniPlayerStyle,
+                  onCheckedChange = onIslandFollowMiniPlayerStyleChange,
+                  thumbContent = {
+                    Icon(
+                      painter =
+                        painterResource(
+                          id =
+                            if (islandFollowMiniPlayerStyle) R.drawable.check
+                            else R.drawable.close
+                        ),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                  },
+                )
+              },
+              onClick = {
+                onIslandFollowMiniPlayerStyleChange(!islandFollowMiniPlayerStyle)
+              },
+            ),
+            Material3SettingsItem(
+              isHighlighted =
+                (highlightKey == stringResource(R.string.island_style_apply_to)),
+              icon = painterResource(R.drawable.dock_to_top),
+              title = { Text(stringResource(R.string.island_style_apply_to)) },
+              description = {
+                Text(
+                  stringResource(
+                    when (islandBackgroundTarget) {
+                      IslandBackgroundTarget.COLLAPSED ->
+                        R.string.island_style_target_collapsed
+                      IslandBackgroundTarget.EXPANDED ->
+                        R.string.island_style_target_expanded
+                      IslandBackgroundTarget.BOTH -> R.string.island_style_target_both
+                    }
+                  )
+                )
+              },
+              onClick = { showIslandBackgroundTargetDialog = true },
+            )
+          ),
     )
 
     Spacer(modifier = Modifier.height(16.dp))

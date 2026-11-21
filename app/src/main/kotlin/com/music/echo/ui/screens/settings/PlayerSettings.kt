@@ -55,7 +55,6 @@ import echo.music.iad1tya.constants.EnableGoogleCastKey
 import echo.music.iad1tya.constants.UsbDacVolumeModeKey
 import echo.music.iad1tya.constants.HistoryDuration
 import echo.music.iad1tya.constants.IslandAutoHideSecondsKey
-import echo.music.iad1tya.constants.IslandInactivitySecondsKey
 import echo.music.iad1tya.constants.IslandEnabledKey
 import echo.music.iad1tya.constants.IslandShowTrackChangeKey
 import echo.music.iad1tya.constants.IslandVerticalOffsetKey
@@ -139,8 +138,6 @@ fun PlayerSettings(
     rememberPreference(IslandEnabledKey, defaultValue = false)
   val (islandAutoHideSeconds, onIslandAutoHideSecondsChange) =
     rememberPreference(IslandAutoHideSecondsKey, defaultValue = 30)
-  val (islandInactivitySeconds, onIslandInactivitySecondsChange) =
-    rememberPreference(IslandInactivitySecondsKey, defaultValue = 5)
   val (islandShowTrackChange, onIslandShowTrackChange) =
     rememberPreference(IslandShowTrackChangeKey, defaultValue = true)
   val (islandVerticalOffset, onIslandVerticalOffsetChange) =
@@ -961,33 +958,6 @@ fun PlayerSettings(
                     )
                   )
                 }
-              }
-            )
-          )
-          add(
-            Material3SettingsItem(
-              isHighlighted = (highlightKey == stringResource(R.string.island_inactivity_timeout)),
-              icon = painterResource(R.drawable.timer),
-              title = { Text(stringResource(R.string.island_inactivity_timeout)) },
-              description = {
-                Text(
-                  if (islandInactivitySeconds == 0) {
-                    stringResource(R.string.off)
-                  } else {
-                    stringResource(R.string.island_inactivity_timeout_value, islandInactivitySeconds)
-                  }
-                )
-              },
-              onClick = {
-                onIslandInactivitySecondsChange(
-                  when (islandInactivitySeconds) {
-                    3 -> 5
-                    5 -> 8
-                    8 -> 10
-                    10 -> 0
-                    else -> 3
-                  }
-                )
               }
             )
           )

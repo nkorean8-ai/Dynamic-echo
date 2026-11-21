@@ -1,5 +1,6 @@
 package echo.music.island
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -24,10 +25,17 @@ data class IslandPlaybackState(
 
 data class IslandSettings(
   val enabled: Boolean = false,
+  val singleTapExpand: Boolean = true,
   val autoHideSeconds: Int = 30,
   val inactivitySeconds: Int = 5,
   val showTrackChange: Boolean = true,
   val verticalOffsetDp: Int = 0,
+  val backgroundStyle: String = "DEFAULT",
+  val followMiniPlayerStyle: Boolean = false,
+  val miniPlayerBackgroundStyle: String = "DEFAULT",
+  val backgroundTarget: String = "EXPANDED",
+  val hapticsEnabled: Boolean = false,
+  val clickHapticsEnabled: Boolean = true,
 )
 
 @Singleton
@@ -79,7 +87,13 @@ class IslandController @Inject constructor(
       return
     }
     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-    ContextCompat.startActivity(context, launchIntent, null)
+    try {
+      ContextCompat.startActivity(context, launchIntent, null)
+    } catch (error: ActivityNotFoundException) {
+      Timber.tag(TAG).e(error, "Unable to open Echo from the island gesture")
+    } catch (error: SecurityException) {
+      Timber.tag(TAG).e(error, "Background activity launch was blocked for the island gesture")
+    }
   }
 
   fun hasOverlayPermission(): Boolean =

@@ -267,6 +267,16 @@
     <string name="island_vertical_offset_value">%1$d dp</string>
     <string name="island_auto_hide_value">%1$d seconds</string>
     <string name="island_overlay_permission_required">Overlay permission is required for Dynamic Island</string>
+    <string name="island_single_tap_expand">Single tap expands the pill</string>
+    <string name="island_single_tap_expand_desc">Turn off to reserve the single tap; double and triple taps still work</string>
+    <string name="island_background_style">Island background style</string>
+    <string name="island_background_default">Default (near-black)</string>
+    <string name="island_follow_miniplayer_style">Follow mini-player style</string>
+    <string name="island_follow_miniplayer_style_desc">Use the current mini-player background style for the island</string>
+    <string name="island_style_apply_to">Apply style to</string>
+    <string name="island_style_target_collapsed">Collapsed pill</string>
+    <string name="island_style_target_expanded">Expanded panel</string>
+    <string name="island_style_target_both">Collapsed pill and expanded panel</string>
     <string name="audio_loudness_preset">Loudness Preset</string>
     <string name="loudness_preset_quiet">Quiet</string>
     <string name="loudness_preset_normal">Normal</string>
