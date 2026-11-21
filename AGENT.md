@@ -401,7 +401,9 @@ service uses a dark, artwork-tinted surface because the service Compose tree has
 backdrop to sample.
 The overlay root's `dispatchTouchEvent` handler handles `ACTION_OUTSIDE`, captures the
 compact-pill gesture stream before Compose, and forwards expanded-panel seek-slider sequences
-to Compose. Artwork-derived gradients may
+to Compose. A null playback snapshot is debounced for 300 ms before hiding the overlay, to avoid
+flashing during transient player-state gaps; screen-off, foreground, permission, and settings
+hide conditions remain immediate. Artwork-derived gradients may
 only be drawn with at least two distinct colors; otherwise retain the solid near-black
 fallback. Fresh installs use a 60-second paused-playback auto-hide and 140x32dp compact pill;
 existing DataStore values must remain unchanged.

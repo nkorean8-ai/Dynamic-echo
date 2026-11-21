@@ -156,6 +156,7 @@ class IslandOverlayService : Service() {
   private var overlayView: IslandOverlayComposeView? = null
   private var overlayViewAdded = false
   private var hideJob: Job? = null
+  private var playbackUnavailableJob: Job? = null
   private var visibilityJob: Job? = null
   private var inactivityJob: Job? = null
   private var trackChangeJob: Job? = null
@@ -280,6 +281,7 @@ class IslandOverlayService : Service() {
     val settings = controller.settings.value
     if (
       (appInForeground && settings.hideInForeground) ||
+      !settings.enabled ||
       !controller.hasOverlayPermission() ||
       !getSystemService(PowerManager::class.java).isInteractive ||
       resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -289,10 +291,11 @@ class IslandOverlayService : Service() {
       return
     }
     val state = controller.playback.value ?: run {
-      collapseImmediately()
-      hideOverlayWithTransition()
+      schedulePlaybackUnavailableHide()
       return
     }
+    playbackUnavailableJob?.cancel()
+    playbackUnavailableJob = null
     val playbackKey = state.visibilityKey()
     if (
       autoHiddenPlaybackKey != null &&
@@ -301,11 +304,6 @@ class IslandOverlayService : Service() {
       autoHiddenPlaybackKey = null
     }
     val autoHiddenCurrentTrack = autoHiddenPlaybackKey == playbackKey
-    if (!settings.enabled) {
-      collapseImmediately()
-      removeOverlay()
-      return
-    }
     if (autoHiddenCurrentTrack) {
       collapseImmediately()
       hideOverlayWithTransition()
@@ -502,6 +500,8 @@ class IslandOverlayService : Service() {
 
   private fun removeOverlay() {
     stopPausedAutoHide()
+    playbackUnavailableJob?.cancel()
+    playbackUnavailableJob = null
     visibilityJob?.cancel()
     visibilityJob = null
     cancelInactivityTimer()
@@ -560,6 +560,22 @@ class IslandOverlayService : Service() {
       serviceScope.launch {
         delay(ISLAND_VISIBILITY_DURATION_MS)
         if (overlayView === view && !islandVisible) removeOverlay()
+      }
+  }
+
+  private fun schedulePlaybackUnavailableHide() {
+    if (overlayView == null || playbackUnavailableJob?.isActive == true) return
+    playbackUnavailableJob =
+      serviceScope.launch {
+        delay(PLAYBACK_UNAVAILABLE_DEBOUNCE_MS)
+        if (controller.playback.value == null) {
+          Log.d(TAG, "Playback remained unavailable; hiding island")
+          collapseImmediately()
+          hideOverlayWithTransition()
+        } else {
+          Log.d(TAG, "Playback recovered before hide; keeping island visible")
+        }
+        playbackUnavailableJob = null
       }
   }
 
@@ -1206,6 +1222,7 @@ class IslandOverlayService : Service() {
     const val SWIPE_AXIS_RATIO = 1.2f
     const val SWIPE_FOLLOW_MAX_DP = 10
     const val COLLAPSE_ANIMATION_TIMEOUT_MS = 1500L
+    const val PLAYBACK_UNAVAILABLE_DEBOUNCE_MS = 300L
   }
 }
 

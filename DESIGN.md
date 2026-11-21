@@ -120,6 +120,9 @@ a separate configurable auto-hide, defaulting to 60 seconds on fresh installs. D
 Compose content when the overlay window detaches, and remove WindowManager-registered views
 even if their first attach callback has not run yet; the service-owned lifecycle must remain
 alive until the view is no longer registered.
+Debounce a null playback snapshot briefly before the overlay hide transition so temporary
+player-state gaps do not make the entire pill flash; explicit lifecycle and settings hides
+remain immediate.
 The compact pill uses a single 300ms tap-count detector: single tap expands, double tap
 toggles playback, and triple tap opens the app. Right/left swipes change to next/previous by
 default and can be inverted independently of mini-player gestures; double-tap in the
