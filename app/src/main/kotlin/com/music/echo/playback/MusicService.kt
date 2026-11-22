@@ -492,6 +492,8 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   lateinit var playerVolume: MutableStateFlow<Float>
   val isMuted = MutableStateFlow(false)
 
+  @Volatile private var islandSuppressTrackChangeExpansion = false
+
   private fun updateIslandState() {
     val playbackState = player.playbackState
     if (
@@ -510,8 +512,10 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           isPlaying = false,
           isPaused = false,
           isStopped = true,
+          suppressTrackChangeExpansion = islandSuppressTrackChangeExpansion,
         )
       )
+      islandSuppressTrackChangeExpansion = false
       return
     }
     val metadata = currentMediaMetadata.value ?: player.currentMetadata
@@ -530,8 +534,10 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           player.duration.takeIf { duration -> duration > 0L } ?: metadata.duration * 1000L,
         isPlaying = player.isPlaying,
         isPaused = playbackState == Player.STATE_READY && !player.playWhenReady,
+        suppressTrackChangeExpansion = islandSuppressTrackChangeExpansion,
       )
     )
+    islandSuppressTrackChangeExpansion = false
   }
 
   private suspend fun migrateIslandCalibration() {
@@ -3286,6 +3292,9 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     mediaItem: MediaItem?,
     reason: Int,
   ) {
+    islandSuppressTrackChangeExpansion =
+      reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
+      reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
     cutoffGuard.onTrackChanged(mediaItem?.mediaId)
     val prevItem = trackedMediaItem
     resumePodcastPosition(mediaItem, prevItem, reason)

@@ -395,6 +395,10 @@ When SystemUI owns the status-bar region, the overlay top is clamped below its s
 Vivo Android 17 cannot intercept compact taps/swipes before the island root view receives them.
 If a cutout/status-bar inset owns the pill's top region, the overlay top is clamped below the
 safe inset on Vivo/SystemUI devices so the window remains visible and touchable.
+Collapse uses a short 180 ms tween for width, height, and corner morphs instead of a
+spring/bouncy drag motion; expansion retains the established spring morph.
+Compact and expanded artwork rotate slowly while playback is active and stop at the current
+angle while paused. Automatic/repeat Media3 transitions do not expand the Island.
 Overlay permission denial stops the service and leaves normal media playback/notification
 behavior unchanged.
 

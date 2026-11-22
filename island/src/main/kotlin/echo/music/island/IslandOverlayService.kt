@@ -347,7 +347,7 @@ class IslandOverlayService : Service() {
     visibilityJob = null
     if (!islandVisible) islandVisible = true
     if (wasNewTrack) {
-      if (suppressSwipeTrackExpansion) {
+      if (state.suppressTrackChangeExpansion || suppressSwipeTrackExpansion) {
         suppressSwipeTrackExpansion = false
         cancelSuppressSwipeTrackExpansionReset()
         collapseImmediately()
@@ -1351,10 +1351,14 @@ private fun IslandContent(
       targetValue =
         if (showExpandedContent) expandedWidthDp.dp else compactWidthDp.dp,
       animationSpec =
-        spring(
-          dampingRatio = Spring.DampingRatioMediumBouncy,
-          stiffness = Spring.StiffnessMedium,
-        ),
+        if (phase == IslandPhase.COLLAPSING) {
+          tween(180)
+        } else {
+          spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+          )
+        },
       label = "islandWidth",
       finishedListener = { onMorphAnimationFinished("width") },
     )
@@ -1364,10 +1368,14 @@ private fun IslandContent(
       targetValue =
         if (showExpandedContent) EXPANDED_HEIGHT_DP.dp else settings.compactHeightDp.dp,
       animationSpec =
-        spring(
-          dampingRatio = Spring.DampingRatioMediumBouncy,
-          stiffness = Spring.StiffnessMedium,
-        ),
+        if (phase == IslandPhase.COLLAPSING) {
+          tween(180)
+        } else {
+          spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+          )
+        },
       label = "islandHeight",
       finishedListener = { onMorphAnimationFinished("height") },
     )
@@ -1376,10 +1384,14 @@ private fun IslandContent(
     animateDpAsState(
       targetValue = if (showExpandedContent) 28.dp else 19.dp,
       animationSpec =
-        spring(
-          dampingRatio = Spring.DampingRatioMediumBouncy,
-          stiffness = Spring.StiffnessMedium,
-        ),
+        if (phase == IslandPhase.COLLAPSING) {
+          tween(180)
+        } else {
+          spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+          )
+        },
       label = "islandCornerRadius",
       finishedListener = { onMorphAnimationFinished("corner") },
     )
@@ -1482,6 +1494,19 @@ private fun CompactIsland(
   swipeOffsetPx: Float,
   swipeDirection: Int,
 ) {
+  val compactRotationTransition = rememberInfiniteTransition(label = "compactIslandArtworkRotation")
+  val compactRotationBy by
+    compactRotationTransition.animateFloat(
+      initialValue = 0f,
+      targetValue = 360f,
+      animationSpec =
+        infiniteRepeatable(
+          animation = tween(8000, easing = androidx.compose.animation.core.LinearEasing),
+          repeatMode = RepeatMode.Restart,
+        ),
+      label = "compactIslandArtworkAngle",
+    )
+  val compactArtworkRotation = if (state.isPlaying) compactRotationBy else 0f
   Box(Modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.Center) {
     AnimatedContent(
       targetState = trackVisual,
@@ -1501,6 +1526,7 @@ private fun CompactIsland(
           contentScale = ContentScale.Crop,
           modifier =
             Modifier.size((compactHeightDp - 4).coerceIn(16, 28).dp)
+              .graphicsLayer { rotationZ = compactArtworkRotation }
               .clip(RoundedCornerShape(50)),
         )
         Spacer(Modifier.width(centerGapDp.dp).weight(1f))
@@ -1552,6 +1578,19 @@ private fun ExpandedIsland(
   swipeOffsetPx: Float,
   swipeDirection: Int,
 ) {
+  val expandedRotationTransition = rememberInfiniteTransition(label = "expandedIslandArtworkRotation")
+  val expandedRotationBy by
+    expandedRotationTransition.animateFloat(
+      initialValue = 0f,
+      targetValue = 360f,
+      animationSpec =
+        infiniteRepeatable(
+          animation = tween(8000, easing = androidx.compose.animation.core.LinearEasing),
+          repeatMode = RepeatMode.Restart,
+        ),
+      label = "expandedIslandArtworkAngle",
+    )
+  val expandedArtworkRotation = if (state.isPlaying) expandedRotationBy else 0f
   var sliderPosition by remember(state.trackId) {
     mutableStateOf(state.positionMs.toFloat())
   }
@@ -1576,7 +1615,10 @@ private fun ExpandedIsland(
             model = track.artworkUri,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.size(42.dp),
+            modifier =
+              Modifier.size(42.dp)
+                .graphicsLayer { rotationZ = expandedArtworkRotation }
+                .clip(RoundedCornerShape(50)),
           )
           Column(modifier = Modifier.weight(1f).padding(horizontal = 10.dp)) {
             Text(track.title, color = Color.White, maxLines = 1)

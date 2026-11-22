@@ -27,6 +27,7 @@ data class IslandPlaybackState(
   val isPlaying: Boolean,
   val isPaused: Boolean = !isPlaying,
   val isStopped: Boolean = false,
+  val suppressTrackChangeExpansion: Boolean = false,
 )
 
 data class IslandSettings(
