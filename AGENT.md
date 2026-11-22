@@ -383,6 +383,9 @@ foregrounded when that Appearance option is enabled. True idle/end states hide i
 temporary metadata gaps are debounced for 1.5 seconds.
 Compact horizontal swipes change tracks without changing the phase to expanded; track-change
 expansion is allowed only for external/programmatic track changes, not swipe commits.
+Compact window placement is frozen after attachment so insets/status-bar callbacks cannot
+reposition or flicker the pill. Appearance settings show only the island enable toggle until
+the feature is enabled, then reveal the remaining island controls.
 Overlay permission denial stops the service and leaves normal media playback/notification
 behavior unchanged.
 

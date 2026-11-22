@@ -1436,6 +1436,38 @@ fun AppearanceSettings(
     Spacer(modifier = Modifier.height(16.dp))
 
     Material3SettingsGroup(
+      scrollState = scrollState,
+      title = stringResource(R.string.island_title),
+      items =
+        listOf(
+          Material3SettingsItem(
+            isHighlighted = (highlightKey == stringResource(R.string.island_enable)),
+            icon = painterResource(R.drawable.graphic_eq),
+            title = { Text(stringResource(R.string.island_enable)) },
+            description = { Text(stringResource(R.string.island_enable_desc)) },
+            trailingContent = {
+              Switch(
+                checked = islandEnabled,
+                onCheckedChange = requestIslandEnabled,
+                thumbContent = {
+                  Icon(
+                    painter =
+                      painterResource(
+                        if (islandEnabled) R.drawable.check else R.drawable.close
+                      ),
+                    contentDescription = null,
+                    modifier = Modifier.size(SwitchDefaults.IconSize),
+                  )
+                },
+              )
+            },
+            onClick = { requestIslandEnabled(!islandEnabled) },
+          )
+        ),
+    )
+
+    if (islandEnabled) {
+    Material3SettingsGroup(
         scrollState = scrollState,
         title = stringResource(R.string.island_title),
         items =
@@ -1545,29 +1577,6 @@ fun AppearanceSettings(
                 )
               },
               onClick = { showIslandBackgroundTargetDialog = true },
-            ),
-            Material3SettingsItem(
-              isHighlighted = (highlightKey == stringResource(R.string.island_enable)),
-              icon = painterResource(R.drawable.graphic_eq),
-              title = { Text(stringResource(R.string.island_enable)) },
-              description = { Text(stringResource(R.string.island_enable_desc)) },
-              trailingContent = {
-                Switch(
-                  checked = islandEnabled,
-                  onCheckedChange = requestIslandEnabled,
-                  thumbContent = {
-                    Icon(
-                      painter =
-                        painterResource(
-                          if (islandEnabled) R.drawable.check else R.drawable.close
-                        ),
-                      contentDescription = null,
-                      modifier = Modifier.size(SwitchDefaults.IconSize),
-                    )
-                  },
-                )
-              },
-              onClick = { requestIslandEnabled(!islandEnabled) },
             ),
             Material3SettingsItem(
               isHighlighted = (highlightKey == stringResource(R.string.island_auto_hide)),
@@ -1790,7 +1799,8 @@ fun AppearanceSettings(
               },
             )
           ),
-    )
+        )
+      }
 
     Spacer(modifier = Modifier.height(16.dp))
 

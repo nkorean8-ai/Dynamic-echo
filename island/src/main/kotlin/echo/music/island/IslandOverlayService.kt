@@ -473,6 +473,9 @@ class IslandOverlayService : Service() {
   private fun updateOverlayPosition(insets: WindowInsetsCompat) {
     val view = overlayView ?: return
     val params = view.layoutParams as? WindowManager.LayoutParams ?: return
+    if (isCompactPhase(phase)) {
+      return
+    }
     val cutout =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         view.rootWindowInsets?.displayCutout ?: currentDisplayCutout()
