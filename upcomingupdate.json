@@ -41,7 +41,9 @@
     "Dynamic Island: reuse a stable compact window anchor across expand/collapse and skip unchanged layouts",
     "Dynamic Island: clamp the pill below Vivo/SystemUI status-bar ownership to preserve touch delivery",
     "Dynamic Island: replace collapse spring motion with a short simple tween",
-    "Dynamic Island: rotate artwork while playing and stop it while paused, and suppress expansion on automatic/repeat track transitions"
+    "Dynamic Island: rotate artwork while playing and stop it while paused, and suppress expansion on automatic/repeat track transitions",
+    "Dynamic Island: remove remaining collapse spring timing from content crossfade and swipe-offset reset",
+    "Dynamic Island: persist automatic/repeat track suppression until the Island consumes the new track"
   ],
   "contributors": []
 }

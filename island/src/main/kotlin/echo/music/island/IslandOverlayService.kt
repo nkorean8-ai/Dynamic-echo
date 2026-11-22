@@ -1412,11 +1412,7 @@ private fun IslandContent(
   val animatedSwipeOffset by
     animateFloatAsState(
       targetValue = swipeOffsetPx,
-      animationSpec =
-        spring(
-          dampingRatio = Spring.DampingRatioNoBouncy,
-          stiffness = Spring.StiffnessLow,
-        ),
+      animationSpec = tween(if (phase == IslandPhase.COLLAPSING) 180 else 120),
       label = "islandSwipeOffset",
     )
   val trackVisual = IslandTrackVisual(state.trackId, state.title, state.artist, state.artworkUri)
@@ -1449,6 +1445,20 @@ private fun IslandContent(
       AnimatedContent(
         targetState = showExpandedContent,
         modifier = Modifier.fillMaxSize(),
+        transitionSpec = {
+          fadeIn(
+            tween(
+              180,
+              easing = androidx.compose.animation.core.LinearEasing,
+            )
+          ) togetherWith
+            fadeOut(
+              tween(
+                180,
+                easing = androidx.compose.animation.core.LinearEasing,
+              )
+            )
+        },
         label = "islandContent",
       ) { showExpanded ->
         if (showExpanded) {

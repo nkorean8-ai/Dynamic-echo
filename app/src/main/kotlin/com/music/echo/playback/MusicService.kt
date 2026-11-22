@@ -515,7 +515,6 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           suppressTrackChangeExpansion = islandSuppressTrackChangeExpansion,
         )
       )
-      islandSuppressTrackChangeExpansion = false
       return
     }
     val metadata = currentMediaMetadata.value ?: player.currentMetadata
@@ -537,7 +536,6 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         suppressTrackChangeExpansion = islandSuppressTrackChangeExpansion,
       )
     )
-    islandSuppressTrackChangeExpansion = false
   }
 
   private suspend fun migrateIslandCalibration() {
