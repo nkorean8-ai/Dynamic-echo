@@ -391,6 +391,10 @@ cutout-derived horizontal offsets are avoided because OEM cutout coordinates can
 and move the overlay outside the screen.
 The compact window's successful x/y anchor is reused through expand/collapse cycles; layout
 updates are skipped when width, height, x, and y are unchanged.
+When SystemUI owns the status-bar region, the overlay top is clamped below its safe inset so
+Vivo Android 17 cannot intercept compact taps/swipes before the island root view receives them.
+If a cutout/status-bar inset owns the pill's top region, the overlay top is clamped below the
+safe inset on Vivo/SystemUI devices so the window remains visible and touchable.
 Overlay permission denial stops the service and leaves normal media playback/notification
 behavior unchanged.
 

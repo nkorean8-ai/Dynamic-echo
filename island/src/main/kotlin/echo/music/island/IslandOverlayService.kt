@@ -745,8 +745,16 @@ class IslandOverlayService : Service() {
         ?: initialTopInset()
     val baseline =
       if (anchor?.usesPath == true) 0 else settings.verticalBaselineCorrectionDp
-    return anchorY - dp(settings.compactHeightDp / 2) +
-      dp(settings.verticalCalibrationDp + baseline)
+    val desiredTop =
+      anchorY - dp(settings.compactHeightDp / 2) +
+        dp(settings.verticalCalibrationDp + baseline)
+    val safeTop =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        activeCutout?.safeInsetTop ?: initialTopInset()
+      } else {
+        initialTopInset()
+      }
+    return maxOf(desiredTop, safeTop)
   }
 
   private fun centerGapDp(): Int {

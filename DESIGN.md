@@ -136,6 +136,9 @@ Horizontal cutout-center correction is not applied automatically; the compact wi
 screen-centred and only moves by the user's explicit horizontal calibration slider.
 Expand/collapse window updates reuse the compact anchor and skip layout updates when dimensions
 and position are unchanged, preventing drift and repeat WindowManager layout calls.
+On OEM SystemUI implementations where the status-bar window intercepts touches over the
+cutout, clamp the overlay below the safe status-bar inset instead of placing it inside that
+touch-owned region.
 The compact pill uses a single 300ms tap-count detector: single tap expands, double tap
 toggles playback, and triple tap opens the app. Right/left swipes change to next/previous by
 default and can be inverted independently of mini-player gestures; double-tap in the

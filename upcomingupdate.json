@@ -38,7 +38,8 @@
     "Dynamic Island: distinguish true playback stop/end from transient metadata gaps and keep compact swipes from moving or expanding the pill",
     "Dynamic Island: freeze compact cutout positioning after attachment and hide secondary Appearance controls until the island is enabled",
     "Dynamic Island: prevent unreliable OEM cutout-X coordinates from moving the overlay off-screen",
-    "Dynamic Island: reuse a stable compact window anchor across expand/collapse and skip unchanged layouts"
+    "Dynamic Island: reuse a stable compact window anchor across expand/collapse and skip unchanged layouts",
+    "Dynamic Island: clamp the pill below Vivo/SystemUI status-bar ownership to preserve touch delivery"
   ],
   "contributors": []
 }
