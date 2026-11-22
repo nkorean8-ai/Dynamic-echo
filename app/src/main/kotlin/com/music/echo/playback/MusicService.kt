@@ -499,7 +499,19 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         playbackState == Player.STATE_IDLE ||
         playbackState == Player.STATE_ENDED
     ) {
-      islandController.updatePlayback(null)
+      islandController.updatePlayback(
+        IslandPlaybackState(
+          trackId = null,
+          title = "",
+          artist = "",
+          artworkUri = null,
+          positionMs = 0L,
+          durationMs = 0L,
+          isPlaying = false,
+          isPaused = false,
+          isStopped = true,
+        )
+      )
       return
     }
     val metadata = currentMediaMetadata.value ?: player.currentMetadata

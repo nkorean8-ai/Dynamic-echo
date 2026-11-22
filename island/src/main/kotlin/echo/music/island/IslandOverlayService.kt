@@ -308,6 +308,11 @@ class IslandOverlayService : Service() {
     }
     playbackUnavailableJob?.cancel()
     playbackUnavailableJob = null
+    if (state.isStopped) {
+      collapseImmediately()
+      hideOverlayWithTransition()
+      return
+    }
     val playbackKey = state.visibilityKey()
     if (
       autoHiddenPlaybackKey != null &&
@@ -1235,7 +1240,7 @@ class IslandOverlayService : Service() {
     const val SWIPE_AXIS_RATIO = 1.2f
     const val SWIPE_FOLLOW_MAX_DP = 10
     const val COLLAPSE_ANIMATION_TIMEOUT_MS = 1500L
-    const val PLAYBACK_UNAVAILABLE_DEBOUNCE_MS = 300L
+    const val PLAYBACK_UNAVAILABLE_DEBOUNCE_MS = 1500L
   }
 }
 
@@ -1436,7 +1441,6 @@ private fun CompactIsland(
       transitionSpec = { islandTrackTransition(swipeDirection) },
       modifier =
         Modifier.fillMaxSize()
-          .offset { androidx.compose.ui.unit.IntOffset(swipeOffsetPx.roundToInt(), 0) }
           .padding(horizontal = COMPACT_HORIZONTAL_PADDING_DP.dp),
       label = "islandCompactTrack",
     ) { track ->

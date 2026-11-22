@@ -378,8 +378,9 @@ player. The service uses a ComposeView with explicit lifecycle, saved-state, and
 ViewModel-store owners, disposes composition on window detachment, tracks pending
 WindowManager attachment separately from view attachment. Only one overlay service instance
 may own a window; duplicate starts are stopped immediately.
-status-bar/display-cutout insets, and hides while the app process is foregrounded when that
-Appearance option is enabled.
+Positions itself from status-bar/display-cutout insets and hides while the app process is
+foregrounded when that Appearance option is enabled. True idle/end states hide immediately;
+temporary metadata gaps are debounced for 1.5 seconds.
 Overlay permission denial stops the service and leaves normal media playback/notification
 behavior unchanged.
 

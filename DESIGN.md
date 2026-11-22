@@ -125,7 +125,8 @@ player-state gaps do not make the entire pill flash; explicit lifecycle and sett
 remain immediate.
 Only one Dynamic Island service instance may own the WindowManager view. Duplicate service
 starts are stopped and repeated redraws are avoided so the compact and expanded states cannot
-leave overlapping or flashing overlay windows.
+leave overlapping or flashing overlay windows. The compact pill itself never translates during
+swipes; only a clipped in-pill hint/track transition is allowed.
 The compact pill uses a single 300ms tap-count detector: single tap expands, double tap
 toggles playback, and triple tap opens the app. Right/left swipes change to next/previous by
 default and can be inverted independently of mini-player gestures; double-tap in the
