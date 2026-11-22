@@ -386,6 +386,11 @@ expansion is allowed only for external/programmatic track changes, not swipe com
 Compact window placement is frozen after attachment so insets/status-bar callbacks cannot
 reposition or flicker the pill. Appearance settings show only the island enable toggle until
 the feature is enabled, then reveal the remaining island controls.
+Horizontal placement uses the window gravity center plus only the explicit calibration offset;
+cutout-derived horizontal offsets are avoided because OEM cutout coordinates can be unreliable
+and move the overlay outside the screen.
+The compact window's successful x/y anchor is reused through expand/collapse cycles; layout
+updates are skipped when width, height, x, and y are unchanged.
 Overlay permission denial stops the service and leaves normal media playback/notification
 behavior unchanged.
 

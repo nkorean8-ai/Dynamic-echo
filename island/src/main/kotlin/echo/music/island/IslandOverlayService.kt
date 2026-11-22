@@ -193,6 +193,8 @@ class IslandOverlayService : Service() {
   private var isPrimaryInstance = false
   private var suppressSwipeTrackExpansion = false
   private var suppressSwipeTrackExpansionReset: Runnable? = null
+  private var stableCompactX: Int? = null
+  private var stableCompactY: Int? = null
 
   private val screenReceiver =
     object : BroadcastReceiver() {
@@ -425,12 +427,14 @@ class IslandOverlayService : Service() {
         PixelFormat.TRANSLUCENT,
       ).apply {
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        x = initialCutoutHorizontalOffset() + dp(settings.horizontalOffsetDp)
+        x = dp(settings.horizontalOffsetDp)
         y = overlayTopPosition(settings)
       }
     try {
       manager.addView(view, params)
       overlayViewAdded = true
+      stableCompactX = params.x
+      stableCompactY = params.y
       val cutout = currentDisplayCutout()
       val anchor = resolveIslandCutoutAnchor(cutout, resources.displayMetrics.density)
       Log.i(
@@ -483,8 +487,9 @@ class IslandOverlayService : Service() {
         null
       }
     val settings = controller.settings.value
-    val targetY = overlayTopPosition(settings, view, cutout)
-    val targetX = cutoutHorizontalOffset(cutout) + dp(settings.horizontalOffsetDp)
+    val targetY =
+      stableCompactY ?: overlayTopPosition(settings, view, cutout)
+    val targetX = dp(settings.horizontalOffsetDp)
     if (params.x != targetX || params.y != targetY) {
       params.x = targetX
       params.y = targetY
@@ -506,8 +511,7 @@ class IslandOverlayService : Service() {
   }
 
   private fun initialCutoutHorizontalOffset(): Int {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return 0
-    return cutoutHorizontalOffset(currentDisplayCutout())
+    return 0
   }
 
   private fun currentDisplayCutout(): android.view.DisplayCutout? {
@@ -516,18 +520,13 @@ class IslandOverlayService : Service() {
   }
 
   private fun cutoutHorizontalOffset(cutout: android.view.DisplayCutout?): Int {
-    val displayWidth =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        windowManager?.currentWindowMetrics?.bounds?.width() ?: resources.displayMetrics.widthPixels
-      } else {
-        resources.displayMetrics.widthPixels
-      }
-    val anchor = resolveIslandCutoutAnchor(cutout, resources.displayMetrics.density)
-    return ((anchor?.centerX ?: (displayWidth / 2f)) - displayWidth / 2f).toInt()
+    return 0
   }
 
   private fun removeOverlay() {
     stopPausedAutoHide()
+    stableCompactX = null
+    stableCompactY = null
     playbackUnavailableJob?.cancel()
     playbackUnavailableJob = null
     cancelSuppressSwipeTrackExpansionReset()
@@ -709,6 +708,10 @@ class IslandOverlayService : Service() {
     val view = viewOverride ?: overlayView ?: return
     val params = paramsOverride ?: view.layoutParams as? WindowManager.LayoutParams ?: return
     val settings = controller.settings.value
+    val previousWidth = params.width
+    val previousHeight = params.height
+    val previousX = params.x
+    val previousY = params.y
     params.width = dp(if (expanded) expandedWindowWidthDp() else compactWidthDp(settings))
     params.height = dp(if (expanded) EXPANDED_HEIGHT_DP else settings.compactHeightDp)
     val cutout =
@@ -717,9 +720,15 @@ class IslandOverlayService : Service() {
       } else {
         null
       }
-    params.x = cutoutHorizontalOffset(cutout) + dp(settings.horizontalOffsetDp)
-    params.y = overlayTopPosition(settings, view, cutout)
-    updateOverlayLayout(view, params)
+    params.x = dp(settings.horizontalOffsetDp)
+    params.y =
+      stableCompactY ?: overlayTopPosition(settings, view, cutout)
+    val layoutChanged =
+      previousWidth != params.width ||
+        previousHeight != params.height ||
+        previousX != params.x ||
+        previousY != params.y
+    if (layoutChanged) updateOverlayLayout(view, params)
   }
 
   private fun overlayTopPosition(

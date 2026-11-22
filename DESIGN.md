@@ -132,6 +132,10 @@ is reserved for external or programmatic track changes, not gesture-triggered ch
 Keep the compact window position fixed once attached; status-bar/cutout inset callbacks must not
 move or flicker it. Appearance keeps the Dynamic Island section collapsed behind its enable
 toggle until the feature is active.
+Horizontal cutout-center correction is not applied automatically; the compact window stays
+screen-centred and only moves by the user's explicit horizontal calibration slider.
+Expand/collapse window updates reuse the compact anchor and skip layout updates when dimensions
+and position are unchanged, preventing drift and repeat WindowManager layout calls.
 The compact pill uses a single 300ms tap-count detector: single tap expands, double tap
 toggles playback, and triple tap opens the app. Right/left swipes change to next/previous by
 default and can be inverted independently of mini-player gestures; double-tap in the
