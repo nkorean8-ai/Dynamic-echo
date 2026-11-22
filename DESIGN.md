@@ -141,6 +141,8 @@ cutout, clamp the overlay below the safe status-bar inset instead of placing it 
 touch-owned region.
 Collapse morphs use a simple 180 ms tween for width, height, and corner radius; avoid
 springy/draggable content motion on collapse, while expansion keeps the spring shape morph.
+The outer expanded/collapsed content crossfade and swipe-offset reset use linear tween timing
+during collapse.
 Artwork in compact and expanded island states rotates as a quiet DVD-style disc only during
 playback and stops immediately in paused state. No advertisement or promotion integration is
 added to the island.
