@@ -191,6 +191,8 @@ class IslandOverlayService : Service() {
   private var lastInactivitySeconds: Int? = null
   private var lastLayoutSettings: IslandSettings? = null
   private var isPrimaryInstance = false
+  private var suppressSwipeTrackExpansion = false
+  private var suppressSwipeTrackExpansionReset: Runnable? = null
 
   private val screenReceiver =
     object : BroadcastReceiver() {
@@ -343,8 +345,15 @@ class IslandOverlayService : Service() {
     visibilityJob = null
     if (!islandVisible) islandVisible = true
     if (wasNewTrack) {
-      if (settings.showTrackChange) beginExpand(trackChange = true)
-      else if (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) collapseImmediately()
+      if (suppressSwipeTrackExpansion) {
+        suppressSwipeTrackExpansion = false
+        cancelSuppressSwipeTrackExpansionReset()
+        collapseImmediately()
+      } else if (settings.showTrackChange) {
+        beginExpand(trackChange = true)
+      } else if (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) {
+        collapseImmediately()
+      }
     }
   }
 
@@ -518,6 +527,8 @@ class IslandOverlayService : Service() {
     stopPausedAutoHide()
     playbackUnavailableJob?.cancel()
     playbackUnavailableJob = null
+    cancelSuppressSwipeTrackExpansionReset()
+    suppressSwipeTrackExpansion = false
     visibilityJob?.cancel()
     visibilityJob = null
     cancelInactivityTimer()
@@ -811,6 +822,11 @@ class IslandOverlayService : Service() {
     inactivityJob = null
   }
 
+  private fun cancelSuppressSwipeTrackExpansionReset() {
+    suppressSwipeTrackExpansionReset?.let(gestureHandler::removeCallbacks)
+    suppressSwipeTrackExpansionReset = null
+  }
+
   private fun isSeekSliderTouch(x: Float, y: Float): Boolean =
     (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) &&
       seekSliderBounds?.contains(Offset(x, y)) == true
@@ -906,6 +922,17 @@ class IslandOverlayService : Service() {
                 }
               performSwipeHaptic()
               Log.d(TAG, "Gesture callback swipe ${if (next) "next" else "previous"}")
+              if (gestureStartPhase == IslandPhase.COLLAPSED) {
+                suppressSwipeTrackExpansion = true
+                suppressSwipeTrackExpansionReset?.let(gestureHandler::removeCallbacks)
+                suppressSwipeTrackExpansionReset =
+                  Runnable {
+                    suppressSwipeTrackExpansion = false
+                    suppressSwipeTrackExpansionReset = null
+                  }.also {
+                    gestureHandler.postDelayed(it, 1500L)
+                  }
+              }
               if (next) controller.next() else controller.previous()
             }
           }

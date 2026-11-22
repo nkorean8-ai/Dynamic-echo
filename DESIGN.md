@@ -127,6 +127,8 @@ Only one Dynamic Island service instance may own the WindowManager view. Duplica
 starts are stopped and repeated redraws are avoided so the compact and expanded states cannot
 leave overlapping or flashing overlay windows. The compact pill itself never translates during
 swipes; only a clipped in-pill hint/track transition is allowed.
+Compact horizontal swipes change tracks without expanding the pill. Brief track-change expansion
+is reserved for external or programmatic track changes, not gesture-triggered changes.
 The compact pill uses a single 300ms tap-count detector: single tap expands, double tap
 toggles playback, and triple tap opens the app. Right/left swipes change to next/previous by
 default and can be inverted independently of mini-player gestures; double-tap in the

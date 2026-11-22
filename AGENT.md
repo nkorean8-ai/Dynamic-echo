@@ -381,6 +381,8 @@ may own a window; duplicate starts are stopped immediately.
 Positions itself from status-bar/display-cutout insets and hides while the app process is
 foregrounded when that Appearance option is enabled. True idle/end states hide immediately;
 temporary metadata gaps are debounced for 1.5 seconds.
+Compact horizontal swipes change tracks without changing the phase to expanded; track-change
+expansion is allowed only for external/programmatic track changes, not swipe commits.
 Overlay permission denial stops the service and leaves normal media playback/notification
 behavior unchanged.
 
