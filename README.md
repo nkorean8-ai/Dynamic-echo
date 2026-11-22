@@ -89,7 +89,10 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 
 > **Dynamic Island (New!)** — Enable the optional, cutout-aware now-playing pill from **Settings → Appearance**. Tap to expand for playback controls and seeking, swipe to change tracks, and see the album artwork rotate while music is playing. Automatic track changes stay compact, and collapse uses a simple, non-spring animation. The feature requires Android's **Display over other apps** permission and hides while Echo Music is in the foreground.
 
-**Music DNA** — Instantly uncover the backstory of any track. Echo Music queries Genius for deep track annotations, and intelligently falls back to Wikipedia API extracts for regional or obscure tracks where crowd-sourced meanings are missing.
+- **Local Taste Engine** — Generate personalized mixes from on-device listening history. It works offline without an account, learns from skips, and combines local taste signals with Last.fm similar tracks, artists, and genres.
+- **Music Flow** — Discover personalized tracks in an optional full-screen, vertical-swipe feed. Like or dismiss tracks, add them to playlists, view synced lyrics, restore your previous queue, and use downloaded tracks for offline discovery.
+- **Android Auto improvements** — Browse YouTube Home shelves alongside your library, and optionally resume the restored queue when your phone connects to a car.
+- **Spotify library updates** — Browse Spotify and in-app libraries in separate tabs, with independent sorting and improved playlist search and layouts.
 
 <br>
 
