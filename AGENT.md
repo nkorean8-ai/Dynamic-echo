@@ -395,14 +395,15 @@ When SystemUI owns the status-bar region, the overlay top is clamped below its s
 Vivo Android 17 cannot intercept compact taps/swipes before the island root view receives them.
 If a cutout/status-bar inset owns the pill's top region, the overlay top is clamped below the
 safe inset on Vivo/SystemUI devices so the window remains visible and touchable.
-Collapse uses a short 180 ms tween for width, height, and corner morphs instead of a
-spring/bouncy drag motion; expansion retains the established spring morph.
+Collapse uses a short linear 180 ms tween for width, height, and corner morphs instead of a
+spring/bouncy drag motion; track-content changes during collapse use a fade rather than the
+swipe spring, while expansion retains the established spring morph.
 The outer expanded/collapsed content crossfade and swipe-offset reset also use linear/tween
 timing during collapse, not spring timing.
 Compact and expanded artwork rotate slowly while playback is active and stop at the current
-angle while paused. Automatic/repeat Media3 transitions do not expand the Island.
-The automatic/repeat suppress flag persists until the Island consumes the new track, ensuring
-completion/repeat transitions cannot race a later playback-state update.
+angle while paused. Automatic/repeat suppression is keyed to the incoming track ID, so a later
+manual track change is not accidentally suppressed. Crossfade player swaps are marked as
+automatic explicitly because their transition event fires before the new listener is attached.
 Overlay permission denial stops the service and leaves normal media playback/notification
 behavior unchanged.
 

@@ -87,7 +87,9 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 
 ### What's New
 
-> **Music DNA (New!)** — Instantly uncover the backstory of any track. Echo Music queries Genius for deep track annotations, and intelligently falls back to Wikipedia API extracts for regional or obscure tracks where crowd-sourced meanings are missing.
+> **Dynamic Island (New!)** — Enable the optional, cutout-aware now-playing pill from **Settings → Appearance**. Tap to expand for playback controls and seeking, swipe to change tracks, and see the album artwork rotate while music is playing. Automatic track changes stay compact, and collapse uses a simple, non-spring animation. The feature requires Android's **Display over other apps** permission and hides while Echo Music is in the foreground.
+
+**Music DNA** — Instantly uncover the backstory of any track. Echo Music queries Genius for deep track annotations, and intelligently falls back to Wikipedia API extracts for regional or obscure tracks where crowd-sourced meanings are missing.
 
 <br>
 

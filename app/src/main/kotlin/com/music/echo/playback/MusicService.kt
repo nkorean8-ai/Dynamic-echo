@@ -492,7 +492,15 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   lateinit var playerVolume: MutableStateFlow<Float>
   val isMuted = MutableStateFlow(false)
 
-  @Volatile private var islandSuppressTrackChangeExpansion = false
+  @Volatile private var islandSuppressedTrackId: String? = null
+
+  private fun shouldSuppressIslandTrackExpansion(
+    metadata: echo.music.iad1tya.models.MediaMetadata?,
+  ): Boolean {
+    val suppressedTrackId = islandSuppressedTrackId ?: return false
+    return metadata?.id == suppressedTrackId ||
+      player.currentMediaItem?.mediaId == suppressedTrackId
+  }
 
   private fun updateIslandState() {
     val playbackState = player.playbackState
@@ -512,7 +520,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           isPlaying = false,
           isPaused = false,
           isStopped = true,
-          suppressTrackChangeExpansion = islandSuppressTrackChangeExpansion,
+          suppressTrackChangeExpansion = false,
         )
       )
       return
@@ -533,7 +541,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           player.duration.takeIf { duration -> duration > 0L } ?: metadata.duration * 1000L,
         isPlaying = player.isPlaying,
         isPaused = playbackState == Player.STATE_READY && !player.playWhenReady,
-        suppressTrackChangeExpansion = islandSuppressTrackChangeExpansion,
+        suppressTrackChangeExpansion = shouldSuppressIslandTrackExpansion(metadata),
       )
     )
   }
@@ -3290,9 +3298,15 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     mediaItem: MediaItem?,
     reason: Int,
   ) {
-    islandSuppressTrackChangeExpansion =
-      reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
-      reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
+    islandSuppressedTrackId =
+      if (
+        reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
+          reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
+      ) {
+        mediaItem?.mediaId
+      } else {
+        null
+      }
     cutoffGuard.onTrackChanged(mediaItem?.mediaId)
     val prevItem = trackedMediaItem
     resumePodcastPosition(mediaItem, prevItem, reason)
@@ -6092,6 +6106,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     }
     val nextPlayer = secondaryPlayer ?: return
     val currentPlayer = player
+    islandSuppressedTrackId = nextPlayer.currentMediaItem?.mediaId
 
     fadingPlayer = currentPlayer
     player = nextPlayer
@@ -6175,6 +6190,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     // the outgoing (soon-to-be-released) session, so the incoming track plays
     // without normalization/EQ.
     currentMediaMetadata.value = player.currentMetadata
+    updateIslandState()
     // Same reason: no transition fires for the incoming player, so warm the
     // covers of what follows it here.
     prefetchQueueArtwork()

@@ -43,7 +43,7 @@
     "Dynamic Island: replace collapse spring motion with a short simple tween",
     "Dynamic Island: rotate artwork while playing and stop it while paused, and suppress expansion on automatic/repeat track transitions",
     "Dynamic Island: remove remaining collapse spring timing from content crossfade and swipe-offset reset",
-    "Dynamic Island: persist automatic/repeat track suppression until the Island consumes the new track"
+    "Dynamic Island: suppress automatic expansions for normal and crossfade track transitions without affecting later manual changes, and use non-spring motion throughout collapse"
   ],
   "contributors": []
 }

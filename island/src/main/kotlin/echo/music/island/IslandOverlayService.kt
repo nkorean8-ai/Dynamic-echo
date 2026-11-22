@@ -350,7 +350,6 @@ class IslandOverlayService : Service() {
       if (state.suppressTrackChangeExpansion || suppressSwipeTrackExpansion) {
         suppressSwipeTrackExpansion = false
         cancelSuppressSwipeTrackExpansionReset()
-        collapseImmediately()
       } else if (settings.showTrackChange) {
         beginExpand(trackChange = true)
       } else if (phase == IslandPhase.EXPANDED || phase == IslandPhase.EXPANDING) {
@@ -1352,7 +1351,7 @@ private fun IslandContent(
         if (showExpandedContent) expandedWidthDp.dp else compactWidthDp.dp,
       animationSpec =
         if (phase == IslandPhase.COLLAPSING) {
-          tween(180)
+          tween(180, easing = androidx.compose.animation.core.LinearEasing)
         } else {
           spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -1369,7 +1368,7 @@ private fun IslandContent(
         if (showExpandedContent) EXPANDED_HEIGHT_DP.dp else settings.compactHeightDp.dp,
       animationSpec =
         if (phase == IslandPhase.COLLAPSING) {
-          tween(180)
+          tween(180, easing = androidx.compose.animation.core.LinearEasing)
         } else {
           spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -1385,7 +1384,7 @@ private fun IslandContent(
       targetValue = if (showExpandedContent) 28.dp else 19.dp,
       animationSpec =
         if (phase == IslandPhase.COLLAPSING) {
-          tween(180)
+          tween(180, easing = androidx.compose.animation.core.LinearEasing)
         } else {
           spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -1412,7 +1411,12 @@ private fun IslandContent(
   val animatedSwipeOffset by
     animateFloatAsState(
       targetValue = swipeOffsetPx,
-      animationSpec = tween(if (phase == IslandPhase.COLLAPSING) 180 else 120),
+      animationSpec =
+        if (phase == IslandPhase.COLLAPSING) {
+          tween(180, easing = androidx.compose.animation.core.LinearEasing)
+        } else {
+          tween(120)
+        },
       label = "islandSwipeOffset",
     )
   val trackVisual = IslandTrackVisual(state.trackId, state.title, state.artist, state.artworkUri)
@@ -1477,6 +1481,7 @@ private fun IslandContent(
             trackVisual = trackVisual,
             swipeOffsetPx = animatedSwipeOffset,
             swipeDirection = swipeDirection,
+            isCollapsing = phase == IslandPhase.COLLAPSING,
           )
         } else {
           CompactIsland(
@@ -1487,6 +1492,7 @@ private fun IslandContent(
             centerGapDp = centerGapDp,
             swipeOffsetPx = animatedSwipeOffset,
             swipeDirection = swipeDirection,
+            isCollapsing = phase == IslandPhase.COLLAPSING,
           )
         }
       }
@@ -1503,6 +1509,7 @@ private fun CompactIsland(
   centerGapDp: Int,
   swipeOffsetPx: Float,
   swipeDirection: Int,
+  isCollapsing: Boolean,
 ) {
   val compactRotationTransition = rememberInfiniteTransition(label = "compactIslandArtworkRotation")
   val compactRotationBy by
@@ -1520,7 +1527,7 @@ private fun CompactIsland(
   Box(Modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.Center) {
     AnimatedContent(
       targetState = trackVisual,
-      transitionSpec = { islandTrackTransition(swipeDirection) },
+      transitionSpec = { islandTrackTransition(swipeDirection, isCollapsing) },
       modifier =
         Modifier.fillMaxSize()
           .padding(horizontal = COMPACT_HORIZONTAL_PADDING_DP.dp),
@@ -1587,6 +1594,7 @@ private fun ExpandedIsland(
   trackVisual: IslandTrackVisual,
   swipeOffsetPx: Float,
   swipeDirection: Int,
+  isCollapsing: Boolean,
 ) {
   val expandedRotationTransition = rememberInfiniteTransition(label = "expandedIslandArtworkRotation")
   val expandedRotationBy by
@@ -1614,7 +1622,7 @@ private fun ExpandedIsland(
     Box(Modifier.fillMaxWidth().height(42.dp).clipToBounds()) {
       AnimatedContent(
         targetState = trackVisual,
-        transitionSpec = { islandTrackTransition(swipeDirection) },
+        transitionSpec = { islandTrackTransition(swipeDirection, isCollapsing) },
         modifier =
           Modifier.fillMaxSize()
             .offset { androidx.compose.ui.unit.IntOffset(swipeOffsetPx.roundToInt(), 0) },
@@ -1706,8 +1714,8 @@ private fun ExpandedIsland(
   }
 }
 
-private fun islandTrackTransition(direction: Int) =
-  if (direction == 0) {
+private fun islandTrackTransition(direction: Int, isCollapsing: Boolean) =
+  if (direction == 0 || isCollapsing) {
     fadeIn(tween(120)) togetherWith fadeOut(tween(120))
   } else {
     (

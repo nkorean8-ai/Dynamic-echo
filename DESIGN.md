@@ -139,13 +139,17 @@ and position are unchanged, preventing drift and repeat WindowManager layout cal
 On OEM SystemUI implementations where the status-bar window intercepts touches over the
 cutout, clamp the overlay below the safe status-bar inset instead of placing it inside that
 touch-owned region.
-Collapse morphs use a simple 180 ms tween for width, height, and corner radius; avoid
-springy/draggable content motion on collapse, while expansion keeps the spring shape morph.
+Collapse morphs use a linear 180 ms tween for width, height, and corner radius; avoid
+springy/draggable content motion on collapse, including track-content changes that overlap
+the collapse, while expansion keeps the spring shape morph.
 The outer expanded/collapsed content crossfade and swipe-offset reset use linear tween timing
 during collapse.
 Artwork in compact and expanded island states rotates as a quiet DVD-style disc only during
 playback and stops immediately in paused state. No advertisement or promotion integration is
 added to the island.
+Automatic/repeat transitions and crossfade player swaps do not trigger track-change
+expansion; suppression is tied to the incoming track ID so it cannot leak into later manual
+track changes.
 The compact pill uses a single 300ms tap-count detector: single tap expands, double tap
 toggles playback, and triple tap opens the app. Right/left swipes change to next/previous by
 default and can be inverted independently of mini-player gestures; double-tap in the
